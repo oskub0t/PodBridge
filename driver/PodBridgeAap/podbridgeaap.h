@@ -5,6 +5,9 @@
  * EXPERIMENTAL. Written without being compiled or run; see driver/README.md for the build
  * and test steps. It moves bytes only: all protocol logic lives in the app (AapCodec/AapSession).
  *
+ * Attaches to the "AAP Server" device node Windows creates for the AirPods' AAP service
+ * (confirmed on AirPods Pro 3: BTHENUM\{74ec2172-...}_VID&0001004c_PID&2027).
+ *
  * Contract with the app (docs/advanced-features.md):
  *   - device interface GUID_DEVINTERFACE_PODBRIDGE_AAP is registered for each AirPods device node
  *   - CreateFile opens the L2CAP channel (fails if the AirPods can't be reached); one handle at a time

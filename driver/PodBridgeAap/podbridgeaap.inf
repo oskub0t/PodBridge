@@ -2,10 +2,16 @@
 ; PodBridge AAP driver (OPTIONAL, EXPERIMENTAL). Installing requires administrator rights.
 ; Attaches to the device node Windows creates for the AirPods' Apple Accessory Protocol service.
 ;
-; VERIFY BEFORE INSTALLING: the hardware IDs below are a best guess. Run
-; driver\check-aap-service.ps1 (no admin needed) and replace them with the exact IDs it prints.
-; Assumption: the BTHENUM product ID is the advertisement model ID with its bytes swapped
-; (AirPods Pro 3 advertises 0x2720 -> PID 2027). Unconfirmed.
+; Hardware IDs: Windows creates a device node named "AAP Server" for the AirPods' AAP service.
+; CONFIRMED on AirPods Pro 3 (Windows 11 26200):
+;   BTHENUM\{74ec2172-0bad-4d01-8f77-997b2be0722a}_VID&0001004c_PID&2027
+; which also confirms that the product ID is the advertisement model ID with its bytes swapped
+; (0x2720 -> PID 2027). The other models' IDs follow that rule but are UNCONFIRMED; check yours with
+; driver\check-aap-service.ps1 (or the paste-in command in driver\README.md).
+;
+; Note: on that PC the AAP Server node already had a driver (Status OK). Which one is still to be
+; checked; an inbox, Microsoft-signed match may outrank this test-signed driver, in which case pick
+; it manually: Device Manager > AAP Server > Update driver > Browse > Let me pick > Have Disk.
 ;
 
 [Version]
@@ -31,7 +37,7 @@ podbridgeaap.sys = 1,,
 
 ; AAP service UUID 74ec2172-0bad-4d01-8f77-997b2be0722a, Apple vendor ID (Bluetooth SIG source 0x0001, 0x004C)
 [PodBridge.NTamd64.10.0...19041]
-%DeviceDesc% = PodBridge_Device, BTHENUM\{74ec2172-0bad-4d01-8f77-997b2be0722a}_VID&0001004c_PID&2027 ; AirPods Pro 3
+%DeviceDesc% = PodBridge_Device, BTHENUM\{74ec2172-0bad-4d01-8f77-997b2be0722a}_VID&0001004c_PID&2027 ; AirPods Pro 3 (confirmed)
 %DeviceDesc% = PodBridge_Device, BTHENUM\{74ec2172-0bad-4d01-8f77-997b2be0722a}_VID&0001004c_PID&2014 ; AirPods Pro 2
 %DeviceDesc% = PodBridge_Device, BTHENUM\{74ec2172-0bad-4d01-8f77-997b2be0722a}_VID&0001004c_PID&2024 ; AirPods Pro 2 USB-C
 %DeviceDesc% = PodBridge_Device, BTHENUM\{74ec2172-0bad-4d01-8f77-997b2be0722a}_VID&0001004c_PID&2036 ; AirPods 5

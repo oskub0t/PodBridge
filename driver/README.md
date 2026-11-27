@@ -24,8 +24,9 @@ Get-PnpDevice | Where-Object { $_.InstanceId -like 'BTHENUM\*' -and $_.InstanceI
 
 Look for an entry with `AapService : True`.
 
-- **"the AAP service node exists"**: good. Copy the hardware id it prints into
-  `podbridgeaap.inf`, replacing the guessed ones.
+- **"the AAP service node exists"**: good. It's named **"AAP Server"**. If your model's hardware
+  id isn't in `podbridgeaap.inf` yet, add it.
+  *Confirmed so far:* AirPods Pro 3 → `BTHENUM\{74ec2172-0bad-4d01-8f77-997b2be0722a}_VID&0001004c_PID&2027`.
 - **"no AAP service node"**: Windows doesn't create a device node for that service, so this
   driver can't attach as written. Report it; the fallback is a different attach strategy (e.g. an
   upper filter on the AirPods' main Bluetooth device node).
