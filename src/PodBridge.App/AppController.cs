@@ -10,6 +10,7 @@ using PodBridge.Core;
 using PodBridge.Core.Audio;
 using PodBridge.Core.Ble;
 using PodBridge.Core.Calls;
+using PodBridge.Core.Features;
 
 namespace PodBridge.App;
 
@@ -20,6 +21,8 @@ namespace PodBridge.App;
 ///   endpoint becomes active → music mode (stereo default output)
 ///   Teams takes the mic → call mode (hands-free output + AirPods mic as defaults)
 ///   Teams releases the mic → music mode again
+///   AirPod out / back in → pause / resume (ear detection, from the advert's in-ear flags)
+///   worn elsewhere + this PC starts audio → "Move to This PC"
 /// </summary>
 internal sealed class AppController : IDisposable
 {
@@ -36,6 +39,10 @@ internal sealed class AppController : IDisposable
     private readonly CallDetector _calls;
     private readonly AudioModeController _mode;
     private readonly MicWatchdog _watchdog = new();
+    private readonly MediaSessions _media = new();
+    private readonly EarDetection _ear = new();
+    private readonly LowBatteryMonitor _lowBattery = new();
+    private readonly SwitchAdvisor _switch = new();
     private readonly TrayIcon _tray = new();
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
 
@@ -45,6 +52,7 @@ internal sealed class AppController : IDisposable
 
     private ConnectCard? _card;
     private StatusPanel? _panel;
+    private SettingsWindow? _settings;
     private DateTimeOffset _panelClosedAt;
     private ResolvedEndpoints? _endpoints;
     private bool _connected, _manualCallMode, _learnMode;
@@ -60,7 +68,13 @@ internal sealed class AppController : IDisposable
         _learnMode = _cfg.MyModelId is null;
 
         _presence.Appeared += OnCaseOpened;
-        _presence.Updated += s => { _card?.UpdateStatus(s); RefreshUi(); };
+        _presence.Updated += s =>
+        {
+            _card?.UpdateStatus(s);
+            HandleEars(s);
+            HandleBattery(s);
+            RefreshUi();
+        };
         _presence.Candidate += OnCandidate;
         _calls.CallStarted += OnCallStarted;
         _calls.CallEnded += OnCallEnded;
@@ -68,8 +82,12 @@ internal sealed class AppController : IDisposable
         _ble.Advertisement += s => _ui.BeginInvoke(() => OnAdvertisement(s));
         _ble.Failed += msg => _ui.BeginInvoke(() => { _bleWarning = msg; Log.Write(msg); RefreshUi(); });
 
+        _media.PlaybackStarted += () => _ui.BeginInvoke(() => OnPcAudioStarted(null));
+        CardChrome.UseMaterials = _cfg.UseSystemMaterials;
+
         _tray.Clicked += TogglePanel;
         _tray.QuitRequested += Quit;
+        _tray.SettingsRequested += OpenSettings;
         _timer.Tick += (_, _) => Tick();
     }
 
@@ -77,14 +95,15 @@ internal sealed class AppController : IDisposable
         _cfg.MyModelId is ushort id ? AirPodsModels.NameFor(id, _cfg.ParsedModelNames())
         : _endpoints?.DeviceName ?? "AirPods";
 
-    public void Start(bool showPanel)
+    public void Start(bool showPanel /* false when started at login */)
     {
         Log.Write($"PodBridge {typeof(AppController).Assembly.GetName().Version} starting");
+        _ = _media.InitAsync();
         try { _ble.Start(); }
         catch (Exception ex) { _bleWarning = $"Bluetooth scanning unavailable: {ex.Message}"; Log.Write(_bleWarning); }
         Tick();
         _timer.Start();
-        if (showPanel) TogglePanel();
+        if (showPanel) OpenSettings();
     }
 
     // ---------------- BLE ----------------
@@ -156,7 +175,7 @@ internal sealed class AppController : IDisposable
             {
                 switch (card.State)
                 {
-                    case CardState.Connect or CardState.Failed: Connect(); break;
+                    case CardState.Connect or CardState.Failed or CardState.MoveHere: Connect(); break;
                     default: card.Dismiss(); break;
                 }
             };
@@ -164,13 +183,13 @@ internal sealed class AppController : IDisposable
         }
     }
 
-    private ConnectCard ShowCard(string title, AirPodsStatus? s, CardState state)
+    private ConnectCard ShowCard(string title, AirPodsStatus? s, CardState state, string? detail = null)
     {
         _card?.Close();
         var card = new ConnectCard();
         card.Closed += (_, _) => { if (_card == card) _card = null; };
         _card = card;
-        card.Show(title, s, state);
+        card.Show(title, s, state, detail);
         return card;
     }
 
@@ -223,6 +242,8 @@ internal sealed class AppController : IDisposable
         {
             Log.Write("AirPods disconnected");
             _micWarning = null;
+            _ear.Reset();
+            _media.ForgetPaused();
         }
     }
 
@@ -239,7 +260,8 @@ internal sealed class AppController : IDisposable
             _mode.ApplyCallMode();
             Hud.Show("Call mode", $"AirPods mic on for {FriendlyApp(app)}");
         }
-        else if (!_presence.IsStale(DateTimeOffset.Now))
+        else if (!OnPcAudioStarted($"{FriendlyApp(app)} is using a microphone. Use your AirPods for this call?")
+                 && !_presence.IsStale(DateTimeOffset.Now))
         {
             Hud.Show($"{FriendlyApp(app)} is using a mic", "Your AirPods are nearby but not connected.", HudKind.Warning, 5);
         }
@@ -263,6 +285,60 @@ internal sealed class AppController : IDisposable
         if (key.StartsWith("MSTeams", StringComparison.OrdinalIgnoreCase)) return "Teams";
         var file = Path.GetFileNameWithoutExtension(key.Replace('#', '\\'));
         return file.Equals("ms-teams", StringComparison.OrdinalIgnoreCase) ? "Teams" : file;
+    }
+
+    // ---------------- Ear detection, battery, switching ----------------
+
+    private void HandleEars(AirPodsStatus s)
+    {
+        int count = (s.LeftInEar ? 1 : 0) + (s.RightInEar ? 1 : 0);
+        var action = _ear.Observe(count, s.Timestamp);
+        // Track state always, act only when the PC is the one playing, and never mid-call.
+        if (action == EarAction.None || !_cfg.EarDetection || !_connected || _calls.InCall) return;
+        Log.Write($"Ear detection: {action} ({count} in ear)");
+        _ = action == EarAction.Pause ? _media.PauseAllAsync() : _media.ResumeAsync();
+    }
+
+    private void HandleBattery(AirPodsStatus s)
+    {
+        bool inUse = _connected || s.LeftInEar || s.RightInEar;
+        var alert = _lowBattery.Observe(s);
+        if (alert is null || !_cfg.LowBatteryAlerts || !inUse) return;
+        string which = (alert.Left, alert.Right) switch
+        {
+            (true, true) => "Both AirPods",
+            (true, false) => "Left AirPod",
+            _ => "Right AirPod",
+        };
+        Hud.Show($"{DeviceTitle} battery low", $"{which}: {alert.Percent}% remaining", HudKind.Warning, 6);
+        Log.Write($"Low battery alert: {which} {alert.Percent}%");
+    }
+
+    /// <returns>True if we offered or started a move.</returns>
+    private bool OnPcAudioStarted(string? reason)
+    {
+        var now = DateTimeOffset.Now;
+        var latest = _presence.IsStale(now) ? null : _presence.Latest;
+        var decision = _switch.OnPcAudioStarted(_cfg.ConnectToThisPc, latest, _connected,
+            now - _manualDisconnectAt < ManualDisconnectGrace, now);
+        switch (decision)
+        {
+            case SwitchDecision.Connect:
+                Log.Write("Moving AirPods to this PC (automatic)");
+                Hud.Show($"Moving {DeviceTitle} to this PC");
+                Connect();
+                return true;
+            case SwitchDecision.Offer:
+                var card = ShowCard(DeviceTitle, latest, CardState.MoveHere, reason);
+                card.PrimaryClicked += () =>
+                {
+                    if (card.State is CardState.MoveHere or CardState.Failed) Connect(); else card.Dismiss();
+                };
+                card.SecondaryClicked += card.Dismiss;
+                return true;
+            default:
+                return false;
+        }
     }
 
     // ---------------- Timer ----------------
@@ -311,13 +387,12 @@ internal sealed class AppController : IDisposable
             Learned: _cfg.MyModelId is not null,
             Connected: _connected,
             InCallMode: _mode.InCallMode,
-            CallApp: _calls.CallApp,
-            Battery: b,
-            Warning: _bleWarning ?? _micWarning,
-            AutoConnect: _cfg.AutoConnect,
-            ShowPopup: _cfg.ShowPopup,
             AutoCallMode: _cfg.AutoCallMode,
-            OpenAtLogin: Autostart.IsEnabled));
+            Battery: b,
+            Warning: _bleWarning ?? _micWarning));
+
+        _settings?.ApplyDevice(new DeviceInfo(
+            DeviceTitle, _cfg.MyModelId, _endpoints?.DeviceName, _connected, _mode.InCallMode, b));
     }
 
     private static string Pct(int? v) => v is int x ? $"{x}%" : "–";
@@ -337,26 +412,27 @@ internal sealed class AppController : IDisposable
             if (call) _mode.ApplyCallMode(); else _mode.ApplyMusicMode();
             RefreshUi();
         };
-        panel.SettingChanged += OnSettingChanged;
-        panel.LearnClicked += StartLearning;
-        panel.DiagnosticsClicked += () => { CopyDiagnostics(); panel.FlashDiagnosticsCopied(); };
-        panel.BluetoothSettingsClicked += OpenBluetoothSettings;
+        panel.SettingsClicked += OpenSettings;
         panel.QuitClicked += Quit;
         _panel = panel;
         RefreshUi();
         panel.Show();
     }
 
-    private void OnSettingChanged(string key, bool value)
+    public void OpenSettings()
     {
-        switch (key)
-        {
-            case "AutoConnect": _cfg.AutoConnect = value; break;
-            case "ShowPopup": _cfg.ShowPopup = value; break;
-            case "AutoCallMode": _cfg.AutoCallMode = value; break;
-            case "OpenAtLogin": Autostart.Set(value); return;
-        }
-        ConfigStore.Save(_cfg);
+        if (_settings is not null) { _settings.Activate(); return; }
+        var w = new SettingsWindow(_cfg);
+        w.Closed += (_, _) => _settings = null;
+        w.ConfigChanged += () => ConfigStore.Save(_cfg);
+        w.ConnectToggled += () => { if (_connected) Disconnect(); else Connect(); };
+        w.LearnClicked += StartLearning;
+        w.DiagnosticsClicked += CopyDiagnostics;
+        w.BluetoothSettingsClicked += OpenBluetoothSettings;
+        _settings = w;
+        RefreshUi();
+        w.Show();
+        w.Activate();
     }
 
     private static void OpenBluetoothSettings() =>

@@ -108,21 +108,8 @@ public sealed class BatteryRing : FrameworkElement
 
     private void DrawGlyph(DrawingContext dc, Brush brush, double s)
     {
-        if (Kind == PartKind.Case)
-        {
-            // Rounded case body with a lid seam.
-            var body = new Rect(s * 0.04, s * 0.16, s * 0.92, s * 0.7);
-            dc.DrawRoundedRectangle(null, new Pen(brush, s * 0.08), body, s * 0.22, s * 0.22);
-            dc.DrawLine(new Pen(brush, s * 0.06), new Point(body.Left + s * 0.04, s * 0.38), new Point(body.Right - s * 0.04, s * 0.38));
-            return;
-        }
-
-        // Generic earbud: round head + stem. Right is the mirror image of left.
-        bool right = Kind == PartKind.Right;
-        if (right) dc.PushTransform(new ScaleTransform(-1, 1, s / 2, 0));
-        dc.DrawEllipse(brush, null, new Point(s * 0.40, s * 0.30), s * 0.28, s * 0.28);
-        dc.DrawRoundedRectangle(brush, null, new Rect(s * 0.50, s * 0.30, s * 0.22, s * 0.70), s * 0.11, s * 0.11);
-        if (right) dc.Pop();
+        if (Kind == PartKind.Case) Glyphs.CaseOutline(dc, brush, s);
+        else Glyphs.Bud(dc, brush, null, s, mirrored: Kind == PartKind.Right);
     }
 }
 

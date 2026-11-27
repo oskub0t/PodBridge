@@ -17,15 +17,17 @@ internal sealed class TrayIcon : IDisposable
 
     public event Action? Clicked;
     public event Action? QuitRequested;
+    public event Action? SettingsRequested;
 
     public TrayIcon()
     {
         var menu = new Forms.ContextMenuStrip();
-        menu.Items.Add("Open PodBridge", null, (_, _) => Clicked?.Invoke());
+        menu.Items.Add("AirPods Settings…", null, (_, _) => SettingsRequested?.Invoke());
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Quit", null, (_, _) => QuitRequested?.Invoke());
         _icon.ContextMenuStrip = menu;
         _icon.MouseClick += (_, e) => { if (e.Button == Forms.MouseButtons.Left) Clicked?.Invoke(); };
+        _icon.MouseDoubleClick += (_, e) => { if (e.Button == Forms.MouseButtons.Left) SettingsRequested?.Invoke(); };
         Update(connected: false, lowBattery: false, tooltip: "PodBridge");
     }
 

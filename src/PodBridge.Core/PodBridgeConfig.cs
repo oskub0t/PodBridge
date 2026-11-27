@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using PodBridge.Core.Features;
+
 namespace PodBridge.Core;
 
 public sealed class PodBridgeConfig
@@ -21,6 +24,18 @@ public sealed class PodBridgeConfig
     public bool AutoConnect { get; set; } = true;
     public bool ShowPopup { get; set; } = true;
     public bool AutoCallMode { get; set; } = true;
+
+    /// <summary>Pause when an AirPod comes out, resume when it goes back in.</summary>
+    public bool EarDetection { get; set; } = true;
+
+    /// <summary>What to do when you're wearing your AirPods elsewhere and this PC starts playing.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter<SwitchPolicy>))]
+    public SwitchPolicy ConnectToThisPc { get; set; } = SwitchPolicy.Ask;
+
+    public bool LowBatteryAlerts { get; set; } = true;
+
+    /// <summary>Windows 11 Acrylic/Mica behind cards. Turn off if your PC renders them oddly.</summary>
+    public bool UseSystemMaterials { get; set; } = true;
 
     /// <summary>
     /// Substrings matched against the microphone-usage keys Windows keeps per app. New Teams is the

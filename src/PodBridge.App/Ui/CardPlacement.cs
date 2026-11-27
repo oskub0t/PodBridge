@@ -13,8 +13,10 @@ internal static class CardPlacement
 {
     private const double Rise = 16;
 
-    public static void PlaceNearTray(Window w)
+    public static void PlaceNearTray(Window w, bool usesSystemChrome = false)
     {
+        // Windows 11 flyouts sit 12 px off the screen edge; drawn cards carry their own margin.
+        double gap = usesSystemChrome ? 12 : 0;
         var area = SystemParameters.WorkArea;
         var screenW = SystemParameters.PrimaryScreenWidth;
         w.UpdateLayout();
@@ -24,8 +26,8 @@ internal static class CardPlacement
         bool taskbarTop = area.Top > 0;
         bool taskbarLeft = area.Left > 0 && area.Width < screenW;
 
-        w.Left = taskbarLeft ? area.Left : area.Right - width;
-        w.Top = taskbarTop ? area.Top : area.Bottom - height;
+        w.Left = taskbarLeft ? area.Left + gap : area.Right - width - gap;
+        w.Top = taskbarTop ? area.Top + gap : area.Bottom - height - gap;
     }
 
     public static void AnimateIn(Window w)

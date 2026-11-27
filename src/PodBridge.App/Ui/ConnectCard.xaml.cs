@@ -5,7 +5,7 @@ using PodBridge.Core.Ble;
 
 namespace PodBridge.App.Ui;
 
-public enum CardState { Learn, Connect, Connecting, Connected, NotPaired, Failed }
+public enum CardState { Learn, Connect, Connecting, Connected, NotPaired, Failed, MoveHere }
 
 /// <summary>
 /// The card that appears when you open the case. One clear primary action per state, short text,
@@ -23,6 +23,7 @@ public partial class ConnectCard : Window
     public ConnectCard()
     {
         InitializeComponent();
+        CardChrome.Prepare(this, CardBorder);
         CloseBtn.Click += (_, _) => Dismiss();
         PrimaryBtn.Click += (_, _) => PrimaryClicked?.Invoke();
         SecondaryBtn.Click += (_, _) => SecondaryClicked?.Invoke();
@@ -31,18 +32,18 @@ public partial class ConnectCard : Window
         KeyDown += (_, e) => { if (e.Key == Key.Escape) Dismiss(); };
         Loaded += (_, _) =>
         {
-            CardPlacement.PlaceNearTray(this);
+            CardPlacement.PlaceNearTray(this, CardChrome.MaterialsAvailable);
             CardPlacement.AnimateIn(this);
         };
     }
 
     public CardState State { get; private set; }
 
-    public void Show(string title, AirPodsStatus? status, CardState state)
+    public void Show(string title, AirPodsStatus? status, CardState state, string? detail = null)
     {
         TitleText.Text = title;
         Batteries.Update(status);
-        SetState(state);
+        SetState(state, detail);
         if (!IsVisible) Show();
     }
 
@@ -83,6 +84,13 @@ public partial class ConnectCard : Window
                 SubtitleText.Text = "Pair these AirPods with Windows once: hold the button on the case until the light flashes white, then add them in Bluetooth settings.";
                 PrimaryBtn.Content = "Open Bluetooth Settings";
                 autoCloseSeconds = 30;
+                break;
+            case CardState.MoveHere:
+                SubtitleText.Text = detail ?? "This PC is playing audio. Use your AirPods here?";
+                PrimaryBtn.Content = "Move to This PC";
+                SecondaryBtn.Content = "Not Now";
+                SecondaryBtn.Visibility = Visibility.Visible;
+                autoCloseSeconds = 15;
                 break;
             case CardState.Failed:
                 SubtitleText.Text = detail ?? "Couldn't connect. Try again, or use Bluetooth settings.";

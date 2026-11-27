@@ -3,6 +3,8 @@
     <!-- Semantic colours, loosely following the iOS/macOS system palette. -->
     <SolidColorBrush x:Key="CardBrush" Color="#F5FBFBFD"/>
     <SolidColorBrush x:Key="CardBorderBrush" Color="#14000000"/>
+    <!-- Tint over real Acrylic (Windows 11); the system material does the blur. -->
+    <SolidColorBrush x:Key="CardTintBrush" Color="#33FFFFFF"/>
     <SolidColorBrush x:Key="LabelBrush" Color="#1D1D1F"/>
     <SolidColorBrush x:Key="SecondaryLabelBrush" Color="#6E6E73"/>
     <SolidColorBrush x:Key="SeparatorBrush" Color="#1A000000"/>

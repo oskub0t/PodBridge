@@ -12,23 +12,37 @@ A small Windows tray app that makes AirPods behave on a work PC the way they do 
 | Join a Teams call | Switches every default to the AirPods hands-free output + mic | Reads Windows' own "which app is using the mic" record in HKCU |
 | | Warns if the AirPods mic gets no audio for 20 s | Peak meter on the AirPods capture endpoint |
 | Leave the call | Restores high-quality stereo and your previous default mic | Same as above |
+| Take an AirPod out / put it back | Pauses / resumes whatever was playing (Automatic Ear Detection) | In-ear flags in the advertisement + Windows' system media controls; resumes only what it paused |
+| Wear them on your phone, PC starts playing | "Move to This PC" card, or switches automatically | Like Apple's *Connect to This Mac*: Automatically / When Asked / Never |
+| Battery hits 20 % / 10 % | Low battery alert | Once per threshold; charging re-arms it |
+
+### What isn't possible without admin (and why)
+
+Noise-control switching, Conversation Awareness, Adaptive Audio, spatial audio, exact 1 % battery,
+renaming, hearing features and the Pro 3 heart rate all go through Apple's private protocol over
+a Bluetooth L2CAP channel. Windows only lets a **kernel driver** open L2CAP channels, and drivers
+need admin. The AirPods' own controls still work on Windows by themselves: press for play/pause,
+press twice/three times for skip/back, press and hold to switch Noise Cancellation/Transparency,
+swipe the stem for volume. The Settings window explains this rather than pretending.
 
 > **Why not "when Teams starts"?** Teams runs all day. Switching then would leave you in mono
 > headset quality permanently. A call is detected when Teams actually opens the microphone.
 
-## Design
+## Design: an Apple app on Windows
 
-The UI follows Apple's design principles: one clear action per screen, battery front and
-centre, short labels, 44 pt hit targets, motion that comes from the tray, light and dark mode
-that follow Windows. It still behaves like a Windows app (tray icon, positioned above the
-taskbar, never steals keyboard focus).
+Apple's own Windows apps (Apple Music, Apple TV, Apple Devices) don't imitate macOS. They use
+Windows' own materials and controls, and Apple's style shows in the content. PodBridge does the same:
 
-- **Case-open card**: battery rings for Left / Right / Case, one primary button (Connect / Done).
-- **Tray panel** (click the icon): status, Music | Call segmented control, iOS-style switches.
-- **HUD**: small capsule notices ("Call mode", "Music mode", "AirPods mic is silent").
-
-No Apple artwork or fonts are used: SF Pro is licensed for Apple platforms only, so the text uses
-Segoe UI Variable, and the earbud and case glyphs are drawn in code.
+- **Settings window** (open the app, or double-click the tray icon): laid out like the AirPods
+  pane in macOS System Settings (illustration, battery, grouped plain-language settings,
+  "On your AirPods" explainer, About), built on WPF's Windows 11 Fluent theme: native title bar,
+  Mica background, native combo boxes, buttons and scroll bars.
+- **Case-open card & tray panel**: real Windows 11 Acrylic (the Quick Settings material) with
+  system rounded corners and shadow on 22H2+; drawn translucent cards on Windows 10.
+  Battery rings, one primary action, never steals keyboard focus.
+- **HUD**: capsule notices for call/music mode, low battery, silent mic.
+- Follows light/dark mode live. Text uses Segoe UI Variable (SF Pro is licensed for Apple
+  platforms only); the earbud and case art is drawn in code, not Apple's artwork.
 
 ## First run
 
@@ -78,8 +92,8 @@ solution also builds on Linux (`EnableWindowsTargeting`).
 
 ## Status: v0.1, not yet run on real hardware
 
-Built and unit-tested (31 tests: advert parsing, colleague filtering, call debounce, endpoint
-selection, mode switching). **Not yet run on Windows with real AirPods.** Things to verify first:
+Built and unit-tested (47 tests: advert parsing, colleague filtering, call debounce, endpoint
+selection, mode switching, ear detection, low battery, switch policy). **Not yet run on Windows with real AirPods.** Things to verify first:
 
 - [ ] AirPods Pro 3 model ID (learn mode stores whatever it is; Diagnostics shows it)
 - [ ] Left/right orientation and battery mapping on Pro 3 (inherited from older models)
@@ -87,6 +101,9 @@ selection, mode switching). **Not yet run on Windows with real AirPods.** Things
 - [ ] One-shot reconnect while the AirPods are attached to your iPhone
 - [ ] Silent-mic heuristic (exact-zero peak = nobody recording from the AirPods mic)
 - [ ] Unsigned exe allowed by your company's AppLocker / SmartScreen
+- [ ] How often AirPods advertise while in your ears (sets ear-detection latency; expect 1–3 s)
+- [ ] AirPods keep advertising while connected to the iPhone (needed for "Move to This PC")
+- [ ] Acrylic cards render correctly on your Windows 11 build (turn off "Translucent cards" if not)
 
 ## Layout
 
@@ -98,7 +115,5 @@ tests/                 xUnit
 
 ## Possible next steps
 
-- Real acrylic blur behind cards (DWM backdrop) on Windows 11
-- Low-battery HUD at 20 % / 10 %
-- Ear-detection pause/play (the advert has in-ear bits)
+- Battery fallback from Windows' own HFP battery report when adverts are sparse
 - Signed MSIX for easier corporate install

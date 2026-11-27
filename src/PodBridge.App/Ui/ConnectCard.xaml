@@ -4,7 +4,7 @@
         xmlns:ui="clr-namespace:PodBridge.App.Ui"
         Style="{StaticResource CardWindow}" Width="376" ShowActivated="False"
         Title="PodBridge">
-    <Border Style="{StaticResource Card}" Padding="24,18,24,22">
+    <Border x:Name="CardBorder" Style="{StaticResource Card}" Padding="24,18,24,22">
         <Grid>
             <Button x:Name="CloseBtn" Style="{StaticResource CloseButton}"
                     HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,0,-6,0"
