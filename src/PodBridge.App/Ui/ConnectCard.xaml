@@ -1,0 +1,26 @@
+<Window x:Class="PodBridge.App.Ui.ConnectCard"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="clr-namespace:PodBridge.App.Ui"
+        Style="{StaticResource CardWindow}" Width="376" ShowActivated="False"
+        Title="PodBridge">
+    <Border Style="{StaticResource Card}" Padding="24,18,24,22">
+        <Grid>
+            <Button x:Name="CloseBtn" Style="{StaticResource CloseButton}"
+                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,0,-6,0"
+                    AutomationProperties.Name="Close"/>
+            <StackPanel Margin="0,10,0,0">
+                <TextBlock x:Name="TitleText" Style="{StaticResource Title}" HorizontalAlignment="Center"
+                           Text="AirPods"/>
+                <TextBlock x:Name="SubtitleText" Style="{StaticResource Secondary}" HorizontalAlignment="Center"
+                           TextAlignment="Center" Margin="0,4,0,0" Text="Not connected"/>
+
+                <ui:BatteryRow x:Name="Batteries" Margin="0,22,0,22"/>
+
+                <Button x:Name="PrimaryBtn" Style="{StaticResource PrimaryButton}" Content="Connect"/>
+                <Button x:Name="SecondaryBtn" Style="{StaticResource TextButton}" HorizontalAlignment="Center"
+                        Margin="0,6,0,-8" Content="Not my AirPods" Visibility="Collapsed"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
