@@ -4,3 +4,4 @@ out/
 *.user
 .vs/
 dist/
+tools/icon/icon-*.png

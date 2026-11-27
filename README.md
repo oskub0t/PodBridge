@@ -1,3 +1,5 @@
+<img src="src/PodBridge.App/Assets/PodBridge-256.png" width="96" alt="PodBridge icon" align="right">
+
 # PodBridge
 
 A small Windows tray app that makes AirPods behave on a Windows PC more like they do on a Mac,
