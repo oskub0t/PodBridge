@@ -10,6 +10,7 @@ one self-contained file, no installer, no .NET needed, Windows 10 (2004+) or 11,
 |---|---|---|
 | Open the case | Notices your AirPods (and ignores other people's) | Apple's Bluetooth LE advertisement (WinRT `BluetoothLEAdvertisementWatcher`), filtered by learned model ID + signal strength |
 | | Shows a card with left / right / case battery | Same advertisement, in 10 % steps (that's all Apple broadcasts in the clear) |
+| Close the case | Keeps showing the last known levels, dimmed and with their age ("Case · 2 h ago") | Remembered per part in `%LOCALAPPDATA%\PodBridge\battery.json`, like the iOS Batteries widget |
 | | Connects | Same driver call as *Settings → Bluetooth → Connect* (`KSPROPSETID_BtAudio` one-shot reconnect via Core Audio) |
 | | Sets the stereo output as default, keeps the PC's own mic as the everyday mic | Core Audio `IPolicyConfig` (what every audio switcher uses) |
 | Join a Teams call | Switches every default to the AirPods mic and hands-free output | Windows' own "which app is using the mic" record in HKCU |
@@ -74,7 +75,8 @@ Windows' materials and controls, and Apple's style shows in the content. PodBrid
 ## Privacy
 
 PodBridge makes **no network connections**. Everything stays on your PC:
-settings in `%APPDATA%\PodBridge\config.json`, log in `%LOCALAPPDATA%\PodBridge\log.txt`.
+settings in `%APPDATA%\PodBridge\config.json`, log and last known battery levels in
+`%LOCALAPPDATA%\PodBridge\`.
 
 *Copy Diagnostics* contains your Bluetooth device names (often your first name, e.g.
 "Alex's AirPods Pro"), your audio devices, and raw Bluetooth advertisement bytes from devices

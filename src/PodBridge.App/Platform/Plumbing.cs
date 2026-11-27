@@ -97,6 +97,34 @@ internal static class ConfigStore
     }
 }
 
+/// <summary>Last known battery levels, so they survive restarts. Per user, local only.</summary>
+internal static class BatteryStore
+{
+    private static readonly string File_ =
+        Path.Combine(Path.GetDirectoryName(AppPaths.LogFile)!, "battery.json");
+
+    public static PodBridge.Core.Ble.BatteryMemory Load()
+    {
+        try
+        {
+            if (File.Exists(File_))
+                return JsonSerializer.Deserialize<PodBridge.Core.Ble.BatteryMemory>(File.ReadAllText(File_)) ?? new();
+        }
+        catch (Exception ex) { Log.Write($"Battery memory unreadable, starting fresh: {ex.Message}"); }
+        return new();
+    }
+
+    public static void Save(PodBridge.Core.Ble.BatteryMemory m)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(File_)!);
+            File.WriteAllText(File_, JsonSerializer.Serialize(m));
+        }
+        catch (IOException ex) { Log.Write($"Couldn't save battery memory: {ex.Message}"); }
+    }
+}
+
 internal static class Log
 {
     private static readonly object Gate = new();

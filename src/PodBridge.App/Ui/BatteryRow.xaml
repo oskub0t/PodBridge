@@ -14,6 +14,7 @@
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="Foreground" Value="{DynamicResource SecondaryLabelBrush}"/>
             <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="TextAlignment" Value="Center"/>
             <Setter Property="Margin" Value="0,1,0,0"/>
         </Style>
         <Style x:Key="BoltPath" TargetType="Path">
@@ -33,7 +34,7 @@
                 <Path x:Name="LeftBolt" Style="{StaticResource BoltPath}" Visibility="Collapsed"/>
                 <TextBlock x:Name="LeftPct" Style="{StaticResource Pct}" Text="–"/>
             </StackPanel>
-            <TextBlock Style="{StaticResource Caption}" Text="Left"/>
+            <TextBlock x:Name="LeftCaption" Style="{StaticResource Caption}" Text="Left"/>
         </StackPanel>
         <StackPanel HorizontalAlignment="Center">
             <ui:BatteryRing x:Name="RightRing" Kind="Right"/>
@@ -41,7 +42,7 @@
                 <Path x:Name="RightBolt" Style="{StaticResource BoltPath}" Visibility="Collapsed"/>
                 <TextBlock x:Name="RightPct" Style="{StaticResource Pct}" Text="–"/>
             </StackPanel>
-            <TextBlock Style="{StaticResource Caption}" Text="Right"/>
+            <TextBlock x:Name="RightCaption" Style="{StaticResource Caption}" Text="Right"/>
         </StackPanel>
         <StackPanel HorizontalAlignment="Center">
             <ui:BatteryRing x:Name="CaseRing" Kind="Case"/>
@@ -49,7 +50,7 @@
                 <Path x:Name="CaseBolt" Style="{StaticResource BoltPath}" Visibility="Collapsed"/>
                 <TextBlock x:Name="CasePct" Style="{StaticResource Pct}" Text="–"/>
             </StackPanel>
-            <TextBlock Style="{StaticResource Caption}" Text="Case"/>
+            <TextBlock x:Name="CaseCaption" Style="{StaticResource Caption}" Text="Case"/>
         </StackPanel>
     </UniformGrid>
 

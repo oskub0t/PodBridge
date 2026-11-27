@@ -10,7 +10,7 @@ namespace PodBridge.App.Ui;
 
 public sealed record DeviceInfo(
     string Title, ushort? ModelId, string? BluetoothName, bool Connected, bool InCallMode,
-    AirPodsStatus? Battery, int? WindowsBattery);
+    BatteryView? Battery, bool Nearby, int? WindowsBattery);
 
 /// <summary>
 /// The main window, modelled on the AirPods pane in macOS System Settings: hero, battery, then
@@ -96,7 +96,7 @@ public partial class SettingsWindow : Window
         NameText.Text = d.Title;
         StateText.Text = d.ModelId is null ? "Not set up yet"
             : d.Connected ? (d.InCallMode ? "Connected · In a call" : "Connected")
-            : d.Battery is null ? "Not connected" : "Nearby · Not connected";
+            : d.Nearby ? "Nearby · Not connected" : "Not connected";
         ConnectBtn.Content = d.Connected ? "Disconnect" : "Connect";
         ConnectBtn.Visibility = d.ModelId is null ? Visibility.Collapsed : Visibility.Visible;
         Batteries.Update(d.Battery, d.WindowsBattery);

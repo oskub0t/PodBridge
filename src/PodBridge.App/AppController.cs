@@ -49,6 +49,7 @@ internal sealed class AppController : IDisposable
     private readonly Dictionary<ushort, AirPodsStatus> _seen = [];
     private readonly Dictionary<ushort, DateTimeOffset> _learnPrompted = [];
     private readonly ModelSightings _sightings = new();
+    private readonly BatteryMemory _battery = BatteryStore.Load();
     private int? _windowsBattery;
     private DateTimeOffset _windowsBatteryAt = DateTimeOffset.MinValue;
     private readonly HashSet<ushort> _rejected = [];
@@ -80,7 +81,8 @@ internal sealed class AppController : IDisposable
         _presence.Appeared += OnCaseOpened;
         _presence.Updated += s =>
         {
-            _card?.UpdateStatus(s);
+            if (_battery.Observe(s)) BatteryStore.Save(_battery);
+            _card?.UpdateBattery(_battery.View(DateTimeOffset.Now));
             HandleEars(s);
             HandleBattery(s);
             RefreshUi();
@@ -154,7 +156,7 @@ internal sealed class AppController : IDisposable
         if (_card is { IsVisible: true }) return;
         _learnPrompted[s.ModelId] = s.Timestamp;
 
-        var card = ShowCard(ModelName(s.ModelId) ?? "AirPods nearby", s, CardState.Learn);
+        var card = ShowCard(ModelName(s.ModelId) ?? "AirPods nearby", BatteryView.Live(s), CardState.Learn);
         card.PrimaryClicked += () => Adopt(s);
         card.SecondaryClicked += () => { _rejected.Add(s.ModelId); card.Dismiss(); };
     }
@@ -189,12 +191,12 @@ internal sealed class AppController : IDisposable
 
         if (_connected)
         {
-            if (_cfg.ShowPopup) ShowCard(DeviceTitle, s, CardState.Connected);
+            if (_cfg.ShowPopup) ShowCard(DeviceTitle, MyBattery(), CardState.Connected);
             return;
         }
         if (_endpoints is null)
         {
-            var card = ShowCard(DeviceTitle, s, CardState.NotPaired);
+            var card = ShowCard(DeviceTitle, MyBattery(), CardState.NotPaired);
             card.PrimaryClicked += () => { OpenBluetoothSettings(); card.Dismiss(); };
             return;
         }
@@ -203,7 +205,7 @@ internal sealed class AppController : IDisposable
         if (auto) Connect();
         if (_cfg.ShowPopup || !auto)
         {
-            var card = ShowCard(DeviceTitle, s, _connectRequestedAt is null ? CardState.Connect : CardState.Connecting);
+            var card = ShowCard(DeviceTitle, MyBattery(), _connectRequestedAt is null ? CardState.Connect : CardState.Connecting);
             card.PrimaryClicked += () =>
             {
                 switch (card.State)
@@ -216,13 +218,17 @@ internal sealed class AppController : IDisposable
         }
     }
 
-    private ConnectCard ShowCard(string title, AirPodsStatus? s, CardState state, string? detail = null)
+    /// <summary>Your AirPods' battery: live parts plus remembered ones. Null until set up.</summary>
+    private BatteryView? MyBattery() =>
+        _cfg.MyModelId is ushort id && _battery.ModelId == id ? _battery.View(DateTimeOffset.Now) : null;
+
+    private ConnectCard ShowCard(string title, BatteryView? battery, CardState state, string? detail = null)
     {
         _card?.Close();
         var card = new ConnectCard();
         card.Closed += (_, _) => { if (_card == card) _card = null; };
         _card = card;
-        card.Show(title, s, state, detail);
+        card.Show(title, battery, state, detail);
         return card;
     }
 
@@ -363,7 +369,7 @@ internal sealed class AppController : IDisposable
                 Connect();
                 return true;
             case SwitchDecision.Offer:
-                var card = ShowCard(DeviceTitle, latest, CardState.MoveHere, reason);
+                var card = ShowCard(DeviceTitle, MyBattery(), CardState.MoveHere, reason);
                 card.PrimaryClicked += () =>
                 {
                     if (card.State is CardState.MoveHere or CardState.Failed) Connect(); else card.Dismiss();
@@ -424,11 +430,21 @@ internal sealed class AppController : IDisposable
 
     public void RefreshUi()
     {
-        var b = _presence.IsStale(DateTimeOffset.Now) ? null : _presence.Latest;
-        var low = (b?.LowestPodPercent ?? (b is null ? _windowsBattery : null)) is int p && p <= 20;
-        var tip = b is null
-            ? $"{DeviceTitle}: {(_connected ? (_windowsBattery is int w ? $"{w}%" : "connected") : "not connected")}"
-            : $"{DeviceTitle}: L {Pct(b.LeftPercent)} · R {Pct(b.RightPercent)} · Case {Pct(b.CasePercent)}";
+        var now = DateTimeOffset.Now;
+        var battery = MyBattery();
+        bool nearby = !_presence.IsStale(now);
+        var low = (battery?.LowestPodPercent ?? _windowsBattery) is int p && p <= 20;
+
+        string tip;
+        if (battery is { HasAny: true } v)
+        {
+            // Windows caps tray tooltips at 127 characters; TrayIcon.Update truncates if a long name hits it.
+            tip = $"{DeviceTitle}: L {Part(v.Left)} · R {Part(v.Right)} · Case {Part(v.Case)}";
+        }
+        else
+        {
+            tip = $"{DeviceTitle}: {(_connected ? (_windowsBattery is int w ? $"{w}%" : "connected") : "not connected")}";
+        }
         _tray.Update(_connected, low, tip);
 
         _panel?.Apply(new PanelState(
@@ -437,15 +453,20 @@ internal sealed class AppController : IDisposable
             Connected: _connected,
             InCallMode: _mode.InCallMode,
             AutoCallMode: _cfg.AutoCallMode,
-            Battery: b,
+            Battery: battery,
+            Nearby: nearby,
             WindowsBattery: _windowsBattery,
             Warning: _bleWarning ?? _micWarning));
 
         _settings?.ApplyDevice(new DeviceInfo(
-            DeviceTitle, _cfg.MyModelId, _endpoints?.DeviceName, _connected, _mode.InCallMode, b, _windowsBattery));
+            DeviceTitle, _cfg.MyModelId, _endpoints?.DeviceName, _connected, _mode.InCallMode,
+            battery, nearby, _windowsBattery));
     }
 
     private static string Pct(int? v) => v is int x ? $"{x}%" : "–";
+
+    private static string Part(PartView p) =>
+        p.Age is TimeSpan age && p.Percent is not null ? $"{Pct(p.Percent)} ({BatteryView.FormatAge(age)})" : Pct(p.Percent);
 
     private void TogglePanel()
     {

@@ -39,15 +39,15 @@ public partial class ConnectCard : Window
 
     public CardState State { get; private set; }
 
-    public void Show(string title, AirPodsStatus? status, CardState state, string? detail = null)
+    public void Show(string title, BatteryView? battery, CardState state, string? detail = null)
     {
         TitleText.Text = title;
-        Batteries.Update(status);
+        Batteries.Update(battery);
         SetState(state, detail);
         if (!IsVisible) Show();
     }
 
-    public void UpdateStatus(AirPodsStatus status) => Batteries.Update(status);
+    public void UpdateBattery(BatteryView battery) => Batteries.Update(battery);
 
     public void SetState(CardState state, string? detail = null)
     {

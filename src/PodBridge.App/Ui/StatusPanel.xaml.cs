@@ -11,7 +11,8 @@ public sealed record PanelState(
     bool Connected,
     bool InCallMode,
     bool AutoCallMode,
-    AirPodsStatus? Battery,
+    BatteryView? Battery,
+    bool Nearby,
     int? WindowsBattery,
     string? Warning);
 
@@ -55,7 +56,7 @@ public partial class StatusPanel : Window
             {
                 (false, _) => ("Not set up yet", "SecondaryLabelBrush"),
                 (_, true) => (s.InCallMode ? "Connected · In a call" : "Connected", "GoodBrush"),
-                _ => (s.Battery is null ? "Not connected" : "Nearby · Not connected", "SecondaryLabelBrush"),
+                _ => (s.Nearby ? "Nearby · Not connected" : "Not connected", "SecondaryLabelBrush"),
             };
             StateText.Text = text;
             StateDot.SetResourceReference(Shape.FillProperty, dot);
