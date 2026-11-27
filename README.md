@@ -49,7 +49,7 @@ Windows' own materials and controls, and Apple's style shows in the content. Pod
 1. **Pair once in Windows** (*Settings → Bluetooth & devices → Add device*, hold the case button
    until the light flashes white). Normal users can usually do this. If it's greyed out, your IT
    policy blocks Bluetooth pairing, and no app can get around that.
-2. Download `PodBridge.exe` from the [latest release](https://github.com/oskub0t/PodBridge/releases/latest), copy it to e.g. `%LOCALAPPDATA%\Programs\PodBridge\` and run it.
+2. Download [`release/PodBridge.exe`](https://github.com/oskub0t/PodBridge/raw/main/release/PodBridge.exe) (single file, no install, no .NET needed), copy it to e.g. `%LOCALAPPDATA%\Programs\PodBridge\` and run it.
 3. Click the tray icon → **Set Up My AirPods…** → open the case next to the PC → **These Are Mine**.
 4. In Teams → *Settings → Devices*: set **Speaker** and **Microphone** to the AirPods
    (the *Headset / Hands-Free* entry) or to the default/communications device. Windows defaults
@@ -83,7 +83,7 @@ PodBridge warns you when this happens, but the usual causes are:
 ## Build
 
 Every push to `main` is built and tested on GitHub Actions (the exe is attached to the run);
-pushing a `v*` tag publishes it to a GitHub Release.
+pushing a `v*` tag publishes it to a GitHub Release. The prebuilt exe in `release/` is updated by hand.
 
 
 ```bash
