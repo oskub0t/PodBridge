@@ -79,12 +79,24 @@ public class ParserTests
     public void Rejects_garbage(byte[] data) =>
         Assert.Null(ProximityPairingParser.TryParse(data, -40, T0));
 
+    [Theory]
+    [InlineData((ushort)0x2720, "AirPods Pro 3")]
+    [InlineData((ushort)0x1920, "AirPods 4")]
+    [InlineData((ushort)0x1420, "AirPods Pro 2")]
+    [InlineData((ushort)0x2420, "AirPods Pro 2 (USB-C)")]
+    [InlineData((ushort)0x1F20, "AirPods Max (USB-C)")]
+    public void Known_models_are_named(ushort id, string name)
+    {
+        Assert.True(AirPodsModels.IsKnown(id));
+        Assert.Equal(name, AirPodsModels.NameFor(id));
+    }
+
     [Fact]
     public void Unknown_model_gets_readable_name_and_config_override_wins()
     {
-        Assert.Equal("Apple audio device 0x2720", AirPodsModels.NameFor(0x2720));
-        var extra = new Dictionary<ushort, string> { [0x2720] = "AirPods Pro 3" };
-        Assert.Equal("AirPods Pro 3", AirPodsModels.NameFor(0x2720, extra));
+        Assert.Equal("Apple audio device 0x3620", AirPodsModels.NameFor(0x3620));
+        var extra = new Dictionary<ushort, string> { [0x3620] = "My AirPods" };
+        Assert.Equal("My AirPods", AirPodsModels.NameFor(0x3620, extra));
     }
 
     [Fact]

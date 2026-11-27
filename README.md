@@ -97,7 +97,7 @@ nearby. **Read it and remove anything private before pasting it into a public is
 - `CallApps`: add your conferencing apps (substring of the mic-usage key)
 - `LaptopMicOutsideCalls` (true): keep the PC's mic as the everyday default
 - `MusicOutputName` / `CallOutputName` / `MicName`: pin exact endpoint names if auto-detect picks wrong
-- `ModelNames`: e.g. `{ "0x2720": "AirPods Pro 3" }`
+- `ModelNames`: name a model the app doesn't know yet, e.g. `{ "0x3620": "AirPods …" }`
 
 ## Known AirPods advertisement formats
 
@@ -107,10 +107,13 @@ model IDs all end in `0x20`. See `tests/PodBridge.Core.Tests/FeatureTests.cs` fo
 
 | Model ID | Model |
 |---|---|
-| `0x0E20` / `0x1420` / `0x2420` | AirPods Pro / Pro 2 / Pro 2 (USB-C) |
-| `0x0F20` / `0x1320` | AirPods 2nd / 3rd gen |
-| `0x1920` / `0x1B20` | AirPods 4 / 4 ANC (less certain) |
-| `0x2720` | seen in the field, probably AirPods Pro 3 (unconfirmed) |
+| `0x0220` / `0x0F20` / `0x1320` | AirPods 1st / 2nd / 3rd gen |
+| `0x1920` | AirPods 4 |
+| `0x1B20` | AirPods 4 with ANC (less certain) |
+| `0x0E20` | AirPods Pro |
+| `0x1420` / `0x2420` | AirPods Pro 2 (Lightning / USB-C) |
+| `0x2720` | AirPods Pro 3 (confirmed in the field) |
+| `0x0A20` / `0x1F20` | AirPods Max (Lightning / USB-C) |
 | `0x3620` | seen in the field, unknown |
 
 Contributions of confirmed IDs are welcome (open the case, *Copy Diagnostics*, look for the
@@ -140,7 +143,8 @@ docs/                  advanced-features.md: optional admin-only driver design
 Early but working: it connects, switches audio and reads advertisements on Windows 11. Still to
 confirm with real hardware:
 
-- [ ] Left/right/case battery and in-ear flags on AirPods Pro 3 (`0x2720`)
+- [x] Left/right/case battery on AirPods Pro 3 (`0x2720`)
+- [ ] In-ear flags on AirPods Pro 3: pausing works when both come out, not yet for one
 - [ ] Ear-detection latency (how often AirPods advertise while in ears)
 - [ ] "Move to This PC" while the AirPods are connected to an iPhone
 - [ ] Silent-mic warning (exact-zero peak means nobody is recording from the AirPods mic)
