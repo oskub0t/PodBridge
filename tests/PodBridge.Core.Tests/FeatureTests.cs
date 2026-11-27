@@ -10,34 +10,42 @@ public class EarDetectionTests
     private static DateTimeOffset At(double s) => T0.AddSeconds(s);
 
     [Fact]
-    public void Removing_one_pauses_and_putting_back_resumes()
+    public void Removing_one_pauses_on_the_first_reading_and_putting_back_resumes()
     {
         var e = new EarDetection();
         Assert.Equal(EarAction.None, e.Observe(2, At(0)));
-        Assert.Equal(EarAction.None, e.Observe(1, At(1)));    // first sighting
-        Assert.Equal(EarAction.Pause, e.Observe(1, At(2)));   // confirmed
-        Assert.Equal(EarAction.None, e.Observe(2, At(30)));
-        Assert.Equal(EarAction.Resume, e.Observe(2, At(31)));
+        Assert.Equal(EarAction.Pause, e.Observe(1, At(0.75)));   // next advert, no confirmation wait
+        Assert.Equal(EarAction.None, e.Observe(1, At(1.5)));
+        Assert.Equal(EarAction.Resume, e.Observe(2, At(30)));
     }
 
     [Fact]
-    public void Single_glitch_is_ignored()
+    public void One_off_misread_corrects_itself()
     {
         var e = new EarDetection();
         e.Observe(2, At(0));
-        Assert.Equal(EarAction.None, e.Observe(0, At(1)));
-        Assert.Equal(EarAction.None, e.Observe(2, At(2)));
-        Assert.Equal(EarAction.None, e.Observe(2, At(3)));
-        Assert.Equal(2, e.InEarCount);
+        Assert.Equal(EarAction.Pause, e.Observe(0, At(0.75)));
+        Assert.Equal(EarAction.Resume, e.Observe(2, At(1.5)));
+    }
+
+    [Fact]
+    public void Settle_mode_still_available_for_noisy_models()
+    {
+        var e = new EarDetection { Settle = TimeSpan.FromMilliseconds(600) };
+        e.Observe(2, At(0));
+        Assert.Equal(EarAction.None, e.Observe(0, At(1)));   // glitch...
+        Assert.Equal(EarAction.None, e.Observe(2, At(2)));   // ...ignored
+        Assert.Equal(EarAction.None, e.Observe(1, At(3)));
+        Assert.Equal(EarAction.Pause, e.Observe(1, At(4)));
     }
 
     [Fact]
     public void Putting_in_after_a_long_break_does_not_resume()
     {
         var e = new EarDetection { ResumeWindow = TimeSpan.FromMinutes(10) };
-        e.Observe(2, At(0)); e.Observe(0, At(1)); e.Observe(0, At(2));
-        e.Observe(2, At(60 * 20));
-        Assert.Equal(EarAction.None, e.Observe(2, At(60 * 20 + 1)));
+        e.Observe(2, At(0));
+        e.Observe(0, At(1));
+        Assert.Equal(EarAction.None, e.Observe(2, At(60 * 20)));
     }
 
     [Fact]
@@ -45,8 +53,7 @@ public class EarDetectionTests
     {
         var e = new EarDetection();
         e.Observe(0, At(0));
-        e.Observe(2, At(1));
-        Assert.Equal(EarAction.None, e.Observe(2, At(2)));
+        Assert.Equal(EarAction.None, e.Observe(2, At(1)));
     }
 
     [Fact]
@@ -54,10 +61,8 @@ public class EarDetectionTests
     {
         var e = new EarDetection();
         e.Observe(1, At(0));
-        e.Observe(0, At(1));
-        Assert.Equal(EarAction.Pause, e.Observe(0, At(2)));
-        e.Observe(1, At(5));
-        Assert.Equal(EarAction.Resume, e.Observe(1, At(6)));
+        Assert.Equal(EarAction.Pause, e.Observe(0, At(1)));
+        Assert.Equal(EarAction.Resume, e.Observe(1, At(5)));
     }
 }
 

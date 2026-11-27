@@ -6,10 +6,10 @@ public enum EarAction { None, Pause, Resume }
 /// Automatic ear detection from the in-ear flags in the BLE advertisement.
 /// Take an AirPod out → pause. Put it back within <see cref="ResumeWindow"/> → resume.
 ///
-/// Works on the *number* of pods in ear (0-2), so it doesn't depend on the left/right mapping.
-/// A new count must be seen again after <see cref="Settle"/> before it counts, which filters
-/// one-off glitches. On Apple devices this is instant (it uses the private link); here it waits for
-/// the next advertisement, typically one or two seconds.
+/// Works on the *number* of pods in ear (0-2). Acts on the first reading that differs: worn AirPods
+/// only advertise about every 0.75 s, so waiting for a second confirming reading doubled the delay.
+/// A one-off misread corrects itself (a brief pause, then resume, since resume only restarts what we
+/// paused). <see cref="Settle"/> can re-enable confirmation if a model ever proves noisy.
 /// </summary>
 public sealed class EarDetection
 {
@@ -19,7 +19,9 @@ public sealed class EarDetection
     private int? _pausedAtLevel;
     private DateTimeOffset _pausedAt;
 
-    public TimeSpan Settle { get; init; } = TimeSpan.FromMilliseconds(600);
+    /// <summary>Zero (default): act on the first differing reading. Otherwise the new count must be
+    /// seen again after this long.</summary>
+    public TimeSpan Settle { get; init; } = TimeSpan.Zero;
     public TimeSpan ResumeWindow { get; init; } = TimeSpan.FromMinutes(10);
 
     public int? InEarCount => _stable;
@@ -29,15 +31,31 @@ public sealed class EarDetection
         if (_stable is null) { _stable = inEarCount; return EarAction.None; }
         if (inEarCount == _stable) { _candidate = null; return EarAction.None; }
 
-        if (_candidate != inEarCount)
+        if (Settle > TimeSpan.Zero)
         {
-            _candidate = inEarCount;
-            _candidateSince = now;
-            return EarAction.None;
+            if (_candidate != inEarCount)
+            {
+                _candidate = inEarCount;
+                _candidateSince = now;
+                return EarAction.None;
+            }
+            if (now - _candidateSince < Settle) return EarAction.None;
         }
-        if (now - _candidateSince < Settle) return EarAction.None;
+        return Commit(inEarCount, now);
+    }
 
-        int previous = _stable.Value;
+    /// <summary>
+    /// For exact, one-off events (the advanced driver's in-ear messages): always immediate.
+    /// </summary>
+    public EarAction ObserveExact(int inEarCount, DateTimeOffset now)
+    {
+        if (_stable is null || inEarCount == _stable) { _stable = inEarCount; _candidate = null; return EarAction.None; }
+        return Commit(inEarCount, now);
+    }
+
+    private EarAction Commit(int inEarCount, DateTimeOffset now)
+    {
+        int previous = _stable!.Value;
         _stable = inEarCount;
         _candidate = null;
 
@@ -53,18 +71,6 @@ public sealed class EarDetection
             return EarAction.Resume;
         }
         return EarAction.None;
-    }
-
-    /// <summary>
-    /// For exact, one-off events (the advanced driver's in-ear messages): no settling needed, they
-    /// arrive once per change rather than repeating like advertisements.
-    /// </summary>
-    public EarAction ObserveExact(int inEarCount, DateTimeOffset now)
-    {
-        if (_stable is null || inEarCount == _stable) { _stable = inEarCount; _candidate = null; return EarAction.None; }
-        _candidate = inEarCount;
-        _candidateSince = now - Settle;
-        return Observe(inEarCount, now);
     }
 
     /// <summary>Forget state (e.g. when the AirPods disconnect from this PC).</summary>

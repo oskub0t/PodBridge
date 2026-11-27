@@ -151,7 +151,8 @@ confirm with real hardware:
 - [x] Left/right/case battery on AirPods Pro 3 (`0x2720`)
 - [x] In-ear flags on AirPods Pro 3 (each bud read correctly; captured in tests)
 - [x] Lid open/closed from the lid byte on AirPods Pro 3
-- [ ] Auto-pause when one bud comes out (reading is right; confirming the pause itself)
+- [x] Auto-pause and resume when one bud comes out / goes back (about 0.5 s: worn AirPods
+      advertise every ~0.75 s; the optional driver would make it instant)
 - [ ] Ear-detection latency (how often AirPods advertise while in ears)
 - [ ] "Move to This PC" while the AirPods are connected to an iPhone
 - [ ] Silent-mic warning (exact-zero peak means nobody is recording from the AirPods mic)
