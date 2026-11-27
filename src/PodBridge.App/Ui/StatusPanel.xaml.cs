@@ -12,6 +12,7 @@ public sealed record PanelState(
     bool InCallMode,
     bool AutoCallMode,
     AirPodsStatus? Battery,
+    int? WindowsBattery,
     string? Warning);
 
 /// <summary>Tray popover. Closes when it loses focus, like a menu-bar extra.</summary>
@@ -48,7 +49,7 @@ public partial class StatusPanel : Window
         try
         {
             DeviceText.Text = s.DeviceName;
-            Batteries.Update(s.Battery);
+            Batteries.Update(s.Battery, s.WindowsBattery);
 
             (string text, string dot) = (s.Learned, s.Connected) switch
             {

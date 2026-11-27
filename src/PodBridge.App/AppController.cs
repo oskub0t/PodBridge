@@ -48,6 +48,9 @@ internal sealed class AppController : IDisposable
 
     private readonly Dictionary<ushort, AirPodsStatus> _seen = [];
     private readonly Dictionary<ushort, DateTimeOffset> _learnPrompted = [];
+    private readonly ModelSightings _sightings = new();
+    private int? _windowsBattery;
+    private DateTimeOffset _windowsBatteryAt = DateTimeOffset.MinValue;
     private readonly HashSet<ushort> _rejected = [];
 
     private ConnectCard? _card;
@@ -91,9 +94,17 @@ internal sealed class AppController : IDisposable
         _timer.Tick += (_, _) => Tick();
     }
 
+    /// <summary>
+    /// What you named them (the Bluetooth name Windows shows, e.g. "Sam's AirPods Pro"), as on
+    /// Apple devices. Falls back to the model name only if it's one we actually recognise.
+    /// </summary>
     private string DeviceTitle =>
-        _cfg.MyModelId is ushort id ? AirPodsModels.NameFor(id, _cfg.ParsedModelNames())
-        : _endpoints?.DeviceName ?? "AirPods";
+        _endpoints?.DeviceName ?? _cfg.DeviceName ?? ModelName(_cfg.MyModelId) ?? "AirPods";
+
+    private string? ModelName(ushort? id) =>
+        id is ushort m && (AirPodsModels.IsKnown(m) || _cfg.ParsedModelNames().ContainsKey(m))
+            ? AirPodsModels.NameFor(m, _cfg.ParsedModelNames())
+            : null;
 
     public void Start(bool showPanel /* false when started at login */)
     {
@@ -110,7 +121,13 @@ internal sealed class AppController : IDisposable
 
     private void OnAdvertisement(AirPodsStatus s)
     {
-        if (s.Rssi >= -85) _seen[s.ModelId] = s;
+        if (s.Rssi >= -85)
+        {
+            _seen[s.ModelId] = s;
+            if (_seen.Count > 64) // random IDs (encrypted format) would otherwise grow this forever
+                foreach (var stale in _seen.Values.OrderBy(x => x.Timestamp).Take(_seen.Count - 48).ToList())
+                    _seen.Remove(stale.ModelId);
+        }
         _presence.OnAdvertisement(s);
     }
 
@@ -118,11 +135,13 @@ internal sealed class AppController : IDisposable
     {
         // Once set up, other people's AirPods are simply ignored.
         if (!_learnMode || s.Rssi < LearnRssi || _rejected.Contains(s.ModelId)) return;
+        // Only offer IDs that repeat; a value that changes every advert can't identify anything.
+        if (!_sightings.Observe(s)) return;
         if (_learnPrompted.TryGetValue(s.ModelId, out var t) && s.Timestamp - t < TimeSpan.FromMinutes(10)) return;
         if (_card is { IsVisible: true }) return;
         _learnPrompted[s.ModelId] = s.Timestamp;
 
-        var card = ShowCard(AirPodsModels.NameFor(s.ModelId, _cfg.ParsedModelNames()), s, CardState.Learn);
+        var card = ShowCard(ModelName(s.ModelId) ?? "AirPods nearby", s, CardState.Learn);
         card.PrimaryClicked += () => Adopt(s);
         card.SecondaryClicked += () => { _rejected.Add(s.ModelId); card.Dismiss(); };
     }
@@ -146,6 +165,7 @@ internal sealed class AppController : IDisposable
         _learnMode = true;
         _rejected.Clear();
         _learnPrompted.Clear();
+        _sightings.Clear();
         Hud.Show("Open your AirPods case", "Hold it close to this PC.", seconds: 4);
     }
 
@@ -244,6 +264,7 @@ internal sealed class AppController : IDisposable
             _micWarning = null;
             _ear.Reset();
             _media.ForgetPaused();
+            _windowsBattery = null;
         }
     }
 
@@ -360,6 +381,12 @@ internal sealed class AppController : IDisposable
                 Hud.Show("AirPods mic is silent", "Teams may be using a different microphone.", HudKind.Warning, 6);
             }
 
+            if (_connected && _endpoints is not null && now - _windowsBatteryAt > TimeSpan.FromSeconds(30))
+            {
+                _windowsBatteryAt = now;
+                _ = RefreshWindowsBatteryAsync(_endpoints.DeviceName);
+            }
+
             if (_connectRequestedAt is DateTimeOffset at && !_connected && now - at > ConnectTimeout)
             {
                 _connectRequestedAt = null;
@@ -371,14 +398,23 @@ internal sealed class AppController : IDisposable
         RefreshUi();
     }
 
+    private async Task RefreshWindowsBatteryAsync(string deviceName)
+    {
+        var value = await WindowsBluetooth.GetBatteryAsync(deviceName);
+        if (value == _windowsBattery) return;
+        _windowsBattery = value;
+        Log.Write($"Windows battery for '{deviceName}': {value?.ToString() ?? "not reported"}");
+        RefreshUi();
+    }
+
     // ---------------- UI ----------------
 
     public void RefreshUi()
     {
         var b = _presence.IsStale(DateTimeOffset.Now) ? null : _presence.Latest;
-        var low = b?.LowestPodPercent is int p && p <= 20;
+        var low = (b?.LowestPodPercent ?? (b is null ? _windowsBattery : null)) is int p && p <= 20;
         var tip = b is null
-            ? $"{DeviceTitle}: {(_connected ? "connected" : "not connected")}"
+            ? $"{DeviceTitle}: {(_connected ? (_windowsBattery is int w ? $"{w}%" : "connected") : "not connected")}"
             : $"{DeviceTitle}: L {Pct(b.LeftPercent)} · R {Pct(b.RightPercent)} · Case {Pct(b.CasePercent)}";
         _tray.Update(_connected, low, tip);
 
@@ -389,10 +425,11 @@ internal sealed class AppController : IDisposable
             InCallMode: _mode.InCallMode,
             AutoCallMode: _cfg.AutoCallMode,
             Battery: b,
+            WindowsBattery: _windowsBattery,
             Warning: _bleWarning ?? _micWarning));
 
         _settings?.ApplyDevice(new DeviceInfo(
-            DeviceTitle, _cfg.MyModelId, _endpoints?.DeviceName, _connected, _mode.InCallMode, b));
+            DeviceTitle, _cfg.MyModelId, _endpoints?.DeviceName, _connected, _mode.InCallMode, b, _windowsBattery));
     }
 
     private static string Pct(int? v) => v is int x ? $"{x}%" : "–";
@@ -462,9 +499,14 @@ internal sealed class AppController : IDisposable
         sb.AppendLine().AppendLine($"Resolved: music={_endpoints?.MusicOutput?.Name} call={_endpoints?.CallOutput?.Name} mic={_endpoints?.Mic?.Name}");
 
         sb.AppendLine().AppendLine("Apple audio devices heard recently (model, name, signal, age):");
-        foreach (var s in _seen.Values.OrderByDescending(x => x.Rssi))
+        foreach (var s in _seen.Values.OrderByDescending(x => x.Rssi).Take(20))
             sb.AppendLine($"  0x{s.ModelId:X4}  {AirPodsModels.NameFor(s.ModelId, _cfg.ParsedModelNames()),-24} {s.Rssi} dBm  " +
                           $"{(DateTimeOffset.Now - s.Timestamp).TotalSeconds:0}s ago{(s.ModelId == _cfg.MyModelId ? "  ← yours" : "")}");
+
+        sb.AppendLine().AppendLine($"Windows-reported battery: {_windowsBattery?.ToString() ?? "none"}");
+        sb.AppendLine().AppendLine("Raw advertisement bytes (latest per model, strongest first):");
+        foreach (var s in _seen.Values.OrderByDescending(x => x.Rssi).Take(12))
+            sb.AppendLine($"  0x{s.ModelId:X4}  {s.Rssi} dBm  {s.RawHex}");
 
         sb.AppendLine().AppendLine("Apps using the microphone now:");
         foreach (var m in _micUsage.Read().Where(m => m.InUse))

@@ -24,7 +24,9 @@
         </Style>
     </UserControl.Resources>
 
-    <UniformGrid Columns="3">
+    <Grid>
+    <!-- 1) Per-part battery from the BLE advertisement -->
+    <UniformGrid x:Name="Parts" Columns="3">
         <StackPanel HorizontalAlignment="Center">
             <ui:BatteryRing x:Name="LeftRing" Kind="Left"/>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,8,0,0">
@@ -50,4 +52,19 @@
             <TextBlock Style="{StaticResource Caption}" Text="Case"/>
         </StackPanel>
     </UniformGrid>
+
+    <!-- 2) One overall level, as Windows reports it over the hands-free link -->
+    <StackPanel x:Name="Overall" HorizontalAlignment="Center" Visibility="Collapsed">
+        <ui:BatteryRing x:Name="OverallRing" Kind="Both"/>
+        <TextBlock x:Name="OverallPct" Style="{StaticResource Pct}" HorizontalAlignment="Center" Margin="0,8,0,0"/>
+        <TextBlock Style="{StaticResource Caption}" Text="AirPods"/>
+    </StackPanel>
+
+    <!-- 3) Nothing known yet: say what to do instead of showing dashes -->
+    <StackPanel x:Name="Empty" VerticalAlignment="Center" Visibility="Collapsed" Margin="0,22">
+        <TextBlock Style="{StaticResource Pct}" HorizontalAlignment="Center" Text="Battery not available yet"/>
+        <TextBlock Style="{StaticResource Caption}" FontSize="12" Margin="0,4,0,0" TextAlignment="Center"
+                   TextWrapping="Wrap" Text="Open the case near this PC, or connect your AirPods."/>
+    </StackPanel>
+    </Grid>
 </UserControl>

@@ -9,7 +9,8 @@ using PodBridge.Core.Features;
 namespace PodBridge.App.Ui;
 
 public sealed record DeviceInfo(
-    string Title, ushort? ModelId, string? BluetoothName, bool Connected, bool InCallMode, AirPodsStatus? Battery);
+    string Title, ushort? ModelId, string? BluetoothName, bool Connected, bool InCallMode,
+    AirPodsStatus? Battery, int? WindowsBattery);
 
 /// <summary>
 /// The main window, modelled on the AirPods pane in macOS System Settings: hero, battery, then
@@ -96,8 +97,12 @@ public partial class SettingsWindow : Window
             : d.Battery is null ? "Not connected" : "Nearby · Not connected";
         ConnectBtn.Content = d.Connected ? "Disconnect" : "Connect";
         ConnectBtn.Visibility = d.ModelId is null ? Visibility.Collapsed : Visibility.Visible;
-        Batteries.Update(d.Battery);
-        ModelText.Text = d.ModelId is ushort id ? $"{AirPodsModels.NameFor(id, _cfg.ParsedModelNames())} (0x{id:X4})" : "–";
+        Batteries.Update(d.Battery, d.WindowsBattery);
+        ModelText.Text = d.ModelId is ushort id
+            ? (AirPodsModels.IsKnown(id) || _cfg.ParsedModelNames().ContainsKey(id)
+                ? $"{AirPodsModels.NameFor(id, _cfg.ParsedModelNames())} (0x{id:X4})"
+                : $"Not recognised (0x{id:X4})")
+            : "–";
         BtNameText.Text = d.BluetoothName ?? "–";
     }
 }

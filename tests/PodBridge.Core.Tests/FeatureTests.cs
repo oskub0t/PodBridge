@@ -144,3 +144,47 @@ public class SwitchAdvisorTests
         Assert.Equal(SwitchPolicy.Automatically, JsonSerializer.Deserialize<PodBridgeConfig>(json)!.ConnectToThisPc);
     }
 }
+
+public class ModelSightingsTests
+{
+    private static readonly DateTimeOffset T0 = new(2026, 11, 27, 9, 0, 0, TimeSpan.Zero);
+    private static AirPodsStatus S(ushort model, double sec) =>
+        new(model, null, null, null, false, false, false, false, false, -50, T0.AddSeconds(sec));
+
+    [Fact]
+    public void Stable_id_qualifies_after_three_sightings()
+    {
+        var m = new ModelSightings();
+        Assert.False(m.Observe(S(0x1420, 0)));
+        Assert.False(m.Observe(S(0x1420, 1)));
+        Assert.True(m.Observe(S(0x1420, 2)));
+    }
+
+    [Fact]
+    public void Changing_ids_never_qualify()
+    {
+        var m = new ModelSightings();
+        var rnd = new Random(1);
+        for (int i = 0; i < 200; i++)
+            Assert.False(m.Observe(S((ushort)rnd.Next(0x10000), i * 0.5)));
+    }
+
+    [Fact]
+    public void Sightings_too_far_apart_do_not_add_up()
+    {
+        var m = new ModelSightings { Window = TimeSpan.FromSeconds(20) };
+        m.Observe(S(0x1420, 0)); m.Observe(S(0x1420, 10));
+        Assert.False(m.Observe(S(0x1420, 30)));
+    }
+}
+
+public class RawHexTests
+{
+    [Fact]
+    public void Parser_keeps_raw_payload_for_diagnostics()
+    {
+        var data = new byte[] { 0x07, 0x07, 0x01, 0x0E, 0x20, 0x20, 0x55, 0x05, 0x01 };
+        var s = ProximityPairingParser.TryParse(data, -50, DateTimeOffset.UnixEpoch)!;
+        Assert.Equal("0707010E2020550501", s.RawHex);
+    }
+}

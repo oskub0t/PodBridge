@@ -13,6 +13,9 @@ public sealed record AirPodsStatus(
     short Rssi,
     DateTimeOffset Timestamp)
 {
+    /// <summary>The whole Apple manufacturer payload as hex, for diagnostics.</summary>
+    public string? RawHex { get; init; }
+
     /// <summary>Lowest known pod battery, used for the tray icon.</summary>
     public int? LowestPodPercent =>
         (LeftPercent, RightPercent) switch
@@ -51,7 +54,8 @@ public static class ProximityPairingParser
             int start = i + 2;
             if (start + len > appleData.Length) return null; // truncated / malformed
             if (type == ProximityPairingType && len >= MinPayload)
-                return ParsePayload(appleData.Slice(start, len), rssi, timestamp);
+                return ParsePayload(appleData.Slice(start, len), rssi, timestamp)
+                    with { RawHex = Convert.ToHexString(appleData) };
             i = start + len;
         }
         return null;

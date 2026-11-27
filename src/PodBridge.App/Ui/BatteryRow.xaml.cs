@@ -9,8 +9,17 @@ public partial class BatteryRow : UserControl
 {
     public BatteryRow() => InitializeComponent();
 
-    public void Update(AirPodsStatus? s)
+    /// <param name="s">Per-part battery from the advertisement, if recent.</param>
+    /// <param name="overall">Windows' own single battery value, used when there's no advert data.</param>
+    public void Update(AirPodsStatus? s, int? overall = null)
     {
+        bool hasParts = s is not null && (s.LeftPercent ?? s.RightPercent ?? s.CasePercent) is not null;
+        Parts.Visibility = hasParts ? Visibility.Visible : Visibility.Collapsed;
+        Overall.Visibility = !hasParts && overall is not null ? Visibility.Visible : Visibility.Collapsed;
+        Empty.Visibility = !hasParts && overall is null ? Visibility.Visible : Visibility.Collapsed;
+        OverallRing.Percent = overall;
+        OverallPct.Text = overall is int o ? $"{o}%" : "";
+
         Set(LeftRing, LeftPct, LeftBolt, s?.LeftPercent, s?.LeftCharging == true);
         Set(RightRing, RightPct, RightBolt, s?.RightPercent, s?.RightCharging == true);
         Set(CaseRing, CasePct, CaseBolt, s?.CasePercent, s?.CaseCharging == true);

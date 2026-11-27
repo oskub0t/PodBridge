@@ -4,7 +4,7 @@ using System.Windows.Media.Animation;
 
 namespace PodBridge.App.Ui;
 
-public enum PartKind { Left, Right, Case }
+public enum PartKind { Left, Right, Case, Both }
 
 /// <summary>
 /// Circular battery gauge with the part's glyph in the middle, in the spirit of the iOS Batteries
@@ -108,8 +108,19 @@ public sealed class BatteryRing : FrameworkElement
 
     private void DrawGlyph(DrawingContext dc, Brush brush, double s)
     {
-        if (Kind == PartKind.Case) Glyphs.CaseOutline(dc, brush, s);
-        else Glyphs.Bud(dc, brush, null, s, mirrored: Kind == PartKind.Right);
+        switch (Kind)
+        {
+            case PartKind.Case: Glyphs.CaseOutline(dc, brush, s); break;
+            case PartKind.Both:
+                dc.PushTransform(new TranslateTransform(-s * 0.18, 0));
+                Glyphs.Bud(dc, brush, null, s * 0.9, mirrored: false);
+                dc.Pop();
+                dc.PushTransform(new TranslateTransform(s * 0.28, 0));
+                Glyphs.Bud(dc, brush, null, s * 0.9, mirrored: true);
+                dc.Pop();
+                break;
+            default: Glyphs.Bud(dc, brush, null, s, mirrored: Kind == PartKind.Right); break;
+        }
     }
 }
 
