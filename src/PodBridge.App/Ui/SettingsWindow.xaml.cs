@@ -21,6 +21,8 @@ public sealed record DeviceInfo(
 /// </summary>
 /// <param name="DriverInstalled">The optional PodBridge driver is on this PC.</param>
 /// <param name="Active">A control session with the AirPods is open right now.</param>
+public sealed record AppState(string Version, bool Installed, string? UpdateAvailable, bool UpdateBusy, string UpdateStatus);
+
 public sealed record AdvancedState(bool DriverInstalled, bool Enabled, bool Active, NoiseMode? NoiseMode, bool? ConversationAwareness);
 
 public partial class SettingsWindow : Window
@@ -31,6 +33,8 @@ public partial class SettingsWindow : Window
 
     public event Action? ConfigChanged, ConnectToggled, LearnClicked, DiagnosticsClicked, BluetoothSettingsClicked, AdvancedHelpClicked;
     public event Action<NoiseMode>? NoiseModeChosen;
+    public event Action? CheckUpdatesClicked, UpdateClicked, InstallClicked, UninstallClicked, NotificationSettingsClicked;
+    private bool _installed;
     public event Action<bool>? ConversationAwarenessChosen;
     private bool _applyingAdvanced;
 
@@ -70,6 +74,11 @@ public partial class SettingsWindow : Window
         Bind(LaptopMicSw, v => _cfg.LaptopMicOutsideCalls = v);
         Bind(MaterialsSw, v => { _cfg.UseSystemMaterials = v; CardChrome.UseMaterials = v; });
         Bind(AdvancedSw, v => _cfg.AdvancedFeatures = v);
+        Bind(AutoUpdateSw, v => _cfg.CheckForUpdates = v);
+        CheckUpdatesBtn.Click += (_, _) => CheckUpdatesClicked?.Invoke();
+        UpdateBtn.Click += (_, _) => UpdateClicked?.Invoke();
+        InstallBtn.Click += (_, _) => { if (_installed) UninstallClicked?.Invoke(); else InstallClicked?.Invoke(); };
+        NotificationSettingsBtn.Click += (_, _) => NotificationSettingsClicked?.Invoke();
         AdvancedHelpBtn.Click += (_, _) => AdvancedHelpClicked?.Invoke();
         foreach (var (rb, mode) in new[] { (NcOff, NoiseMode.Off), (NcTransparency, NoiseMode.Transparency),
                                            (NcAdaptive, NoiseMode.Adaptive), (NcAnc, NoiseMode.NoiseCancellation) })
@@ -92,6 +101,7 @@ public partial class SettingsWindow : Window
         LowBatterySw.IsChecked = _cfg.LowBatteryAlerts;
         LaptopMicSw.IsChecked = _cfg.LaptopMicOutsideCalls;
         AdvancedSw.IsChecked = _cfg.AdvancedFeatures;
+        AutoUpdateSw.IsChecked = _cfg.CheckForUpdates;
         LoginSw.IsChecked = Autostart.IsEnabled;
         MaterialsSw.IsChecked = _cfg.UseSystemMaterials;
         MaterialsSw.IsEnabled = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22621);
@@ -127,6 +137,22 @@ public partial class SettingsWindow : Window
                 : $"Not recognised (0x{id:X4})")
             : "–";
         BtNameText.Text = d.BluetoothName ?? "–";
+    }
+
+    public void ApplyAppState(AppState a)
+    {
+        VersionText.Text = a.Version;
+        UpdateStatusText.Text = a.UpdateStatus;
+        CheckUpdatesBtn.IsEnabled = UpdateBtn.IsEnabled = !a.UpdateBusy;
+        UpdateBtn.Visibility = a.UpdateAvailable is null ? Visibility.Collapsed : Visibility.Visible;
+        UpdateBtn.Content = a.Installed ? "Update" : "Download";
+
+        _installed = a.Installed;
+        InstallTitle.Text = a.Installed ? "Installed for this user" : "Not installed";
+        InstallNote.Text = a.Installed
+            ? "In Start and Settings → Apps. Updates install with one click."
+            : "Adds PodBridge to Start and Settings → Apps, and enables one-click updates. No administrator rights needed.";
+        InstallBtn.Content = a.Installed ? "Uninstall…" : "Install for This User";
     }
 
     public void ApplyAdvanced(AdvancedState a)

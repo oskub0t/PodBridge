@@ -126,7 +126,59 @@
                     <CheckBox x:Name="LoginSw" Style="{StaticResource Switch}" Content="Open at login"/>
                     <Rectangle Style="{StaticResource Divider}"/>
                     <CheckBox x:Name="MaterialsSw" Style="{StaticResource Switch}" Content="Translucent cards"/>
+                    <Rectangle Style="{StaticResource Divider}"/>
+                    <Grid Margin="10,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Style="{StaticResource RowLabel}" Text="Notifications"/>
+                        <Button x:Name="NotificationSettingsBtn" Grid.Column="1" Content="Windows Settings…" Padding="12,4"/>
+                    </Grid>
+                    <TextBlock Style="{StaticResource RowNote}"
+                               Text="Low battery, Move to This PC, a silent mic and updates appear in Notification Center and follow Focus."/>
                 </StackPanel>
+            </Border>
+
+            <!-- Software update -->
+            <TextBlock Style="{StaticResource Header}" Text="SOFTWARE UPDATE"/>
+            <Border Style="{StaticResource Group}">
+                <StackPanel>
+                    <CheckBox x:Name="AutoUpdateSw" Style="{StaticResource Switch}" Content="Check for updates automatically"/>
+                    <TextBlock Style="{StaticResource RowNote}"
+                               Text="Asks GitHub once a day whether a new version exists. This is PodBridge's only internet connection."/>
+                    <Rectangle Style="{StaticResource Divider}"/>
+                    <Grid Margin="10,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="UpdateStatusText" Style="{StaticResource Secondary}" VerticalAlignment="Center"
+                                   Margin="0,0,12,0" Text="Not checked yet"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <Button x:Name="CheckUpdatesBtn" Content="Check Now" Padding="12,4"/>
+                            <Button x:Name="UpdateBtn" Style="{StaticResource PrimaryButton}" Height="30" Margin="8,0,0,0"
+                                    Padding="14,0" FontSize="13" Content="Update" Visibility="Collapsed"/>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Installation (per user, no admin) -->
+            <TextBlock Style="{StaticResource Header}" Text="INSTALLATION"/>
+            <Border Style="{StaticResource Group}">
+                <Grid Margin="10,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Margin="0,0,12,0">
+                        <TextBlock x:Name="InstallTitle" Style="{StaticResource RowLabel}" Text="Not installed"/>
+                        <TextBlock x:Name="InstallNote" Style="{StaticResource Secondary}" FontSize="12" Margin="0,2,0,0"
+                                   Text="Adds PodBridge to Start and Settings → Apps, and enables one-click updates. No administrator rights needed."/>
+                    </StackPanel>
+                    <Button x:Name="InstallBtn" Grid.Column="1" VerticalAlignment="Center" Padding="12,4" Content="Install for This User"/>
+                </Grid>
             </Border>
 
             <!-- Advanced features: optional, OFF by default, need a separately installed driver (admin) -->
@@ -199,6 +251,11 @@
             <TextBlock Style="{StaticResource Header}" Text="ABOUT"/>
             <Border Style="{StaticResource Group}">
                 <StackPanel>
+                    <Grid Margin="10,10">
+                        <TextBlock Style="{StaticResource RowLabel}" Text="PodBridge version"/>
+                        <TextBlock x:Name="VersionText" Style="{StaticResource Secondary}" HorizontalAlignment="Right" Text="–"/>
+                    </Grid>
+                    <Rectangle Style="{StaticResource Divider}"/>
                     <Grid Margin="10,10">
                         <TextBlock Style="{StaticResource RowLabel}" Text="Model"/>
                         <TextBlock x:Name="ModelText" Style="{StaticResource Secondary}" HorizontalAlignment="Right" Text="–"/>

@@ -50,15 +50,23 @@ the stem for volume.
 1. **Pair once in Windows** (*Settings → Bluetooth & devices → Add device*, hold the case button
    until the light flashes white). Normal users can usually do this. If it's greyed out, your IT
    policy blocks Bluetooth pairing, and no app can get around that.
-2. Copy `PodBridge.exe` to e.g. `%LOCALAPPDATA%\Programs\PodBridge\` and run it. The exe is not
-   code-signed yet, so SmartScreen may ask you to confirm (*More info → Run anyway*); some company
-   policies (AppLocker/WDAC) block unsigned apps completely.
+2. Download `PodBridge.exe` from the [latest release](https://github.com/oskub0t/PodBridge/releases/latest)
+   and run it. In *Settings → Installation* choose **Install for This User**: it moves into
+   `%LOCALAPPDATA%\Programs\PodBridge`, appears in Start and *Settings → Apps* (with Uninstall),
+   and can update itself. No admin needed. The exe is not code-signed yet, so SmartScreen may ask
+   you to confirm (*More info → Run anyway*); some company policies (AppLocker/WDAC) block
+   unsigned apps completely.
 3. Put the AirPods in the case and **open it next to the PC**. When the card asks, choose
    **These Are Mine**. (Setup only offers an open case close by, so a colleague's pair being worn
    nearby isn't offered.)
 4. In Teams → *Settings → Devices*: set **Speaker** and **Microphone** to the AirPods or to the
    default device. Windows defaults can't override a device Teams has pinned explicitly.
 5. Turn on **Open at login** in Settings (HKCU Run key, no admin).
+
+**Updating:** with *Check for updates automatically* on, PodBridge notifies you when a new
+release is out; **Update** downloads it, restarts, and you're done. **Uninstalling:** *Settings →
+Apps → PodBridge → Uninstall*, or *Uninstall…* in PodBridge's settings; you choose whether to keep
+your settings.
 
 ## "My mic isn't picking up": checklist
 
@@ -80,16 +88,23 @@ Windows' materials and controls, and Apple's style shows in the content. PodBrid
   pane in macOS System Settings, built on WPF's Windows 11 Fluent theme (native title bar, Mica).
 - **Case-open card & tray panel**: Windows 11 Acrylic with system corners and shadow on 22H2+;
   drawn translucent cards on Windows 10. One primary action, never steals keyboard focus.
-- **HUD**: small notices for call/music mode, low battery, silent mic.
+- **Windows notifications** for things you may act on or want to see later (low battery, Move to
+  This PC, silent mic, updates): Notification Center, Focus, per-app settings. Falls back to
+  PodBridge's own pop-up if notifications are turned off.
+- **HUD**: small momentary notices (call mode, music mode, connected), like Apple's overlays.
 - Follows light/dark mode live; keyboard focus ring and screen-reader labels throughout.
 - Segoe UI Variable text (SF Pro is licensed for Apple platforms only); the earbud and case art
   is drawn in code, not Apple artwork.
 
 ## Privacy
 
-PodBridge makes **no network connections**. Everything stays on your PC:
-settings in `%APPDATA%\PodBridge\config.json`, log and last known battery levels in
-`%LOCALAPPDATA%\PodBridge\`.
+Everything stays on your PC: settings in `%APPDATA%\PodBridge\config.json`, log and last known
+battery levels in `%LOCALAPPDATA%\PodBridge\`.
+
+PodBridge's **only network use** is the update check: one HTTPS request a day to `api.github.com`
+asking for the latest release (it sends nothing about you or your devices, only a standard request
+with the PodBridge version as user agent), plus the download if you choose **Update**. Turn it off
+in *Settings → Software Update*.
 
 *Copy Diagnostics* contains your Bluetooth device names (often your first name, e.g.
 "Alex's AirPods Pro"), your audio devices, and raw Bluetooth advertisement bytes from devices

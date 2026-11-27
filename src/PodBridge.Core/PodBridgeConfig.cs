@@ -39,6 +39,11 @@ public sealed class PodBridgeConfig
 
     public bool LowBatteryAlerts { get; set; } = true;
 
+    /// <summary>Ask GitHub once a day whether a newer release exists. The only network use.</summary>
+    public bool CheckForUpdates { get; set; } = true;
+
+    public DateTimeOffset? LastUpdateCheck { get; set; }
+
     /// <summary>
     /// Outside calls, keep the PC's own mic as the default recording device so apps that open the
     /// default mic don't drop the AirPods to mono. Calls still switch to the AirPods mic.

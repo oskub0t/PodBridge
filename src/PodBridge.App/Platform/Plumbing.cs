@@ -58,10 +58,10 @@ internal static class Autostart
         }
     }
 
-    public static void Set(bool enabled)
+    public static void Set(bool enabled, string? exe = null)
     {
         using var k = Registry.CurrentUser.CreateSubKey(RunKey);
-        if (enabled) k.SetValue(Name, $"\"{Environment.ProcessPath}\" --background");
+        if (enabled) k.SetValue(Name, $"\"{exe ?? Environment.ProcessPath}\" --background");
         else k.DeleteValue(Name, throwOnMissingValue: false);
     }
 }

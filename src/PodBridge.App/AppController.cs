@@ -12,6 +12,7 @@ using PodBridge.Core.Audio;
 using PodBridge.Core.Ble;
 using PodBridge.Core.Calls;
 using PodBridge.Core.Features;
+using PodBridge.Core.Updates;
 
 namespace PodBridge.App;
 
@@ -47,6 +48,12 @@ internal sealed class AppController : IDisposable
     private readonly SwitchAdvisor _switch = new();
     private readonly TrayIcon _tray = new();
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
+
+    // Updates (GitHub Releases; the app's only network use, once a day if enabled)
+    private readonly DateTimeOffset _startedAt = DateTimeOffset.Now;
+    private ReleaseInfo? _availableUpdate;
+    private bool _updateBusy;
+    private string? _updateStatus;
 
     // Case-open cards close when the lid closes, like on iOS: the AirPods stop advertising then.
     private readonly AdvertCadence _lidCadence = new();             // fallback: adverts stopped
@@ -147,9 +154,12 @@ internal sealed class AppController : IDisposable
             ? AirPodsModels.NameFor(m, _cfg.ParsedModelNames())
             : null;
 
-    public void Start(bool showPanel /* false when started at login */)
+    public void Start(bool showPanel /* false when started at login */, bool justUpdated = false)
     {
-        Log.Write($"PodBridge {typeof(AppController).Assembly.GetName().Version} starting");
+        Log.Write($"PodBridge {typeof(AppController).Assembly.GetName().Version} starting" +
+                  $" ({(Installer.IsRunningInstalled ? "installed" : "not installed")})");
+        Notifications.Activated += OnNotificationClicked;
+        if (justUpdated) Hud.Show($"PodBridge updated to {Updater.CurrentVersion.ToString(3)}");
         _ = _media.InitAsync();
         try { _ble.Start(); }
         catch (Exception ex) { _bleWarning = $"Bluetooth scanning unavailable: {ex.Message}"; Log.Write(_bleWarning); }
@@ -581,7 +591,7 @@ internal sealed class AppController : IDisposable
             (true, false) => "Left AirPod",
             _ => "Right AirPod",
         };
-        Hud.Show($"{DeviceTitle} battery low", $"{which}: {alert.Percent}% remaining", HudKind.Warning, 6);
+        Notify("battery", $"{DeviceTitle} battery low", $"{which}: {alert.Percent}% remaining", HudKind.Warning);
         Log.Write($"Low battery alert: {which} {alert.Percent}%");
     }
 
@@ -600,6 +610,10 @@ internal sealed class AppController : IDisposable
                 Connect();
                 return true;
             case SwitchDecision.Offer:
+                if (Notifications.Show("move", $"Use {DeviceTitle} with this PC?",
+                        reason ?? "This PC is playing audio and you're wearing your AirPods.",
+                        ("Move to This PC", "move"), ("Not Now", "dismiss")))
+                    return true;
                 var card = ShowCard(DeviceTitle, MyBattery(), CardState.MoveHere, reason);
                 card.PrimaryClicked += () =>
                 {
@@ -620,6 +634,9 @@ internal sealed class AppController : IDisposable
         try
         {
             if (!_connected) RememberPcOutput();
+            if (!_updateBusy && now - _startedAt > TimeSpan.FromMinutes(1) &&
+                UpdatePolicy.ShouldCheck(_cfg.CheckForUpdates, _cfg.LastUpdateCheck, now))
+                _ = CheckForUpdatesAsync(manual: false);
             UpdateConnection();
             UpdateAdvanced(now);
             _calls.Tick(_micUsage.Read(), now);
@@ -630,7 +647,8 @@ internal sealed class AppController : IDisposable
                 _micWarning = "Your AirPods mic isn't receiving any audio. In Teams, check Settings → Devices → Microphone, " +
                               "and make sure the AirPods haven't switched to your phone.";
                 Log.Write("Silent mic warning");
-                Hud.Show("AirPods mic is silent", "Teams may be using a different microphone.", HudKind.Warning, 6);
+                Notify("mic", "Your AirPods mic is silent",
+                    "Teams may be using a different microphone, or the AirPods switched to your phone.", HudKind.Warning);
             }
 
             if (_connected && _endpoints is not null && now - _windowsBatteryAt > TimeSpan.FromSeconds(30))
@@ -694,6 +712,13 @@ internal sealed class AppController : IDisposable
         _settings?.ApplyDevice(new DeviceInfo(
             DeviceTitle, _cfg.MyModelId, _endpoints?.DeviceName, _connected, _mode.InCallMode,
             battery, nearby, _windowsBattery));
+        _settings?.ApplyAppState(new AppState(
+            Version: Updater.CurrentVersion.ToString(3),
+            Installed: Installer.IsInstalled && Installer.IsRunningInstalled,
+            UpdateAvailable: _availableUpdate?.Version.ToString(3),
+            UpdateBusy: _updateBusy,
+            UpdateStatus: _updateStatus ?? (_cfg.LastUpdateCheck is DateTimeOffset t
+                ? $"Last checked {t.LocalDateTime:d MMM HH:mm}" : "Not checked yet")));
         _settings?.ApplyAdvanced(new AdvancedState(
             _driverInstalled, _cfg.AdvancedFeatures, _aap is not null, _aap?.NoiseMode, _aap?.ConversationAwareness));
     }
@@ -735,6 +760,11 @@ internal sealed class AppController : IDisposable
         w.LearnClicked += StartLearning;
         w.DiagnosticsClicked += CopyDiagnostics;
         w.BluetoothSettingsClicked += OpenBluetoothSettings;
+        w.CheckUpdatesClicked += () => _ = CheckForUpdatesAsync(manual: true);
+        w.UpdateClicked += () => _ = InstallUpdateAsync();
+        w.InstallClicked += InstallForUser;
+        w.UninstallClicked += StartUninstall;
+        w.NotificationSettingsClicked += () => OpenUri("ms-settings:notifications");
         w.AdvancedHelpClicked += () => Process.Start(new ProcessStartInfo(
             "https://github.com/oskub0t/PodBridge/blob/main/docs/advanced-features.md") { UseShellExecute = true });
         w.NoiseModeChosen += m => _ = SendAap(a => a.SetNoiseModeAsync(m));
@@ -752,6 +782,8 @@ internal sealed class AppController : IDisposable
     {
         var sb = new StringBuilder();
         sb.AppendLine($"PodBridge {typeof(AppController).Assembly.GetName().Version} on {Environment.OSVersion}");
+        sb.AppendLine($"Installed: {Installer.IsInstalled} (running installed copy: {Installer.IsRunningInstalled})  " +
+                      $"notifications: {(Notifications.Enabled ? "on" : "off")}  last update check: {_cfg.LastUpdateCheck?.ToString("u") ?? "never"}");
         sb.AppendLine($"BLE running: {_ble.IsRunning}  warning: {_bleWarning ?? "none"}");
         sb.AppendLine($"Connected: {_connected}  call mode: {_mode.InCallMode}  in call: {_calls.InCall} ({_calls.CallApp})");
         sb.AppendLine().AppendLine("Config:").AppendLine(JsonSerializer.Serialize(_cfg));
@@ -795,6 +827,123 @@ internal sealed class AppController : IDisposable
         Log.Write("Diagnostics:\n" + text);
         try { Clipboard.SetText(text); } catch (Exception ex) { Log.Write($"Clipboard failed: {ex.Message}"); }
     }
+
+    // ---------------- Notifications, install, updates ----------------
+
+    /// <summary>Windows notification; falls back to PodBridge's own pop-up if notifications are off.</summary>
+    private void Notify(string tag, string title, string body, HudKind kind = HudKind.Info,
+        params (string Label, string Action)[] buttons)
+    {
+        if (!Notifications.Show(tag, title, body, buttons)) Hud.Show(title, body, kind, 6);
+    }
+
+    private void OnNotificationClicked(string action, Microsoft.Toolkit.Uwp.Notifications.ToastArguments args)
+    {
+        Log.Write($"Notification: {action}");
+        switch (action)
+        {
+            case "move": Connect(); break;
+            case "update": _ = InstallUpdateAsync(); break;
+            case "dismiss": break;
+            default: OpenSettings(); break;
+        }
+    }
+
+    private async Task CheckForUpdatesAsync(bool manual)
+    {
+        if (_updateBusy) return;
+        _updateBusy = true;
+        _updateStatus = manual ? "Checking…" : _updateStatus;
+        RefreshUi();
+        try
+        {
+            var latest = await Updater.CheckAsync();
+            _cfg.LastUpdateCheck = DateTimeOffset.Now;
+            ConfigStore.Save(_cfg);
+            if (latest is not null && latest.IsNewerThan(Updater.CurrentVersion))
+            {
+                bool isNew = _availableUpdate?.Version != latest.Version;
+                _availableUpdate = latest;
+                _updateStatus = $"PodBridge {latest.Version.ToString(3)} is available.";
+                Log.Write($"Update available: {latest.Tag}");
+                if (isNew || manual)
+                    Notify("update", $"PodBridge {latest.Version.ToString(3)} is available",
+                        Installer.IsRunningInstalled ? "Update now? PodBridge restarts in a few seconds."
+                                                     : "Open the download page?",
+                        HudKind.Info, ("Update", "update"), ("Later", "dismiss"));
+            }
+            else
+            {
+                _availableUpdate = null;
+                _updateStatus = $"PodBridge is up to date ({Updater.CurrentVersion.ToString(3)}).";
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Write($"Update check failed: {ex.Message}");
+            _updateStatus = "Couldn't check for updates. Check your connection and try again.";
+        }
+        finally
+        {
+            _updateBusy = false;
+            RefreshUi();
+        }
+    }
+
+    private async Task InstallUpdateAsync()
+    {
+        if (_availableUpdate is not ReleaseInfo r || _updateBusy) return;
+        if (!Installer.IsRunningInstalled || r.ExeUrl is null)
+        {
+            // Not installed (e.g. run from Downloads): there's nothing to swap in place.
+            OpenUri(r.PageUrl);
+            return;
+        }
+        _updateBusy = true;
+        _updateStatus = $"Downloading PodBridge {r.Version.ToString(3)}…";
+        RefreshUi();
+        try
+        {
+            var exe = await Updater.DownloadAsync(r);
+            _updateStatus = "Restarting…";
+            RefreshUi();
+            Updater.StartApply(exe);
+            Quit();
+        }
+        catch (Exception ex)
+        {
+            Log.Write($"Update failed: {ex.Message}");
+            _updateStatus = $"Update failed: {ex.Message}";
+            _updateBusy = false;
+            RefreshUi();
+        }
+    }
+
+    private void InstallForUser()
+    {
+        try
+        {
+            var exe = Installer.Install();
+            if (Installer.IsRunningInstalled) { RefreshUi(); return; }
+            // Hand over to the installed copy; it waits for this one to exit.
+            Process.Start(new ProcessStartInfo(exe) { ArgumentList = { "--wait-for-previous" } });
+            Quit();
+        }
+        catch (Exception ex)
+        {
+            Log.Write($"Install failed: {ex}");
+            Hud.Show("Couldn't install PodBridge", ex.Message, HudKind.Warning, 6);
+        }
+    }
+
+    private static void StartUninstall()
+    {
+        var exe = Installer.IsInstalled ? Installer.InstalledExe : Environment.ProcessPath!;
+        Process.Start(new ProcessStartInfo(exe) { ArgumentList = { "--uninstall" } });
+    }
+
+    private static void OpenUri(string uri) =>
+        Process.Start(new ProcessStartInfo(uri) { UseShellExecute = true });
 
     private void Quit()
     {
