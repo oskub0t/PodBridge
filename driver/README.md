@@ -14,6 +14,16 @@ Windows only allows from a kernel driver. Background: [docs/advanced-features.md
 powershell -ExecutionPolicy Bypass -File .\driver\check-aap-service.ps1
 ```
 
+**If scripts are blocked** ("is not digitally signed", common on company PCs where policy
+requires signed scripts): don't try to bypass the policy. Paste the same read-only check
+directly into PowerShell instead; typed commands aren't affected:
+
+```powershell
+Get-PnpDevice | Where-Object { $_.InstanceId -like 'BTHENUM\*' -and $_.InstanceId -match '_VID&0001004C' } | ForEach-Object { [pscustomobject]@{ Name = $_.FriendlyName; Status = $_.Status; AapService = ($_.InstanceId -match '74ec2172'); HardwareIds = ((Get-PnpDeviceProperty -InstanceId $_.InstanceId -KeyName DEVPKEY_Device_HardwareIds).Data -join '; ') } } | Format-List
+```
+
+Look for an entry with `AapService : True`.
+
 - **"the AAP service node exists"**: good. Copy the hardware id it prints into
   `podbridgeaap.inf`, replacing the guessed ones.
 - **"no AAP service node"**: Windows doesn't create a device node for that service, so this
