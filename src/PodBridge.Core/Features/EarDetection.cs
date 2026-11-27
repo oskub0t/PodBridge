@@ -55,6 +55,18 @@ public sealed class EarDetection
         return EarAction.None;
     }
 
+    /// <summary>
+    /// For exact, one-off events (the advanced driver's in-ear messages): no settling needed, they
+    /// arrive once per change rather than repeating like advertisements.
+    /// </summary>
+    public EarAction ObserveExact(int inEarCount, DateTimeOffset now)
+    {
+        if (_stable is null || inEarCount == _stable) { _stable = inEarCount; _candidate = null; return EarAction.None; }
+        _candidate = inEarCount;
+        _candidateSince = now - Settle;
+        return Observe(inEarCount, now);
+    }
+
     /// <summary>Forget state (e.g. when the AirPods disconnect from this PC).</summary>
     public void Reset()
     {

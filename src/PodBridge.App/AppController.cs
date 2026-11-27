@@ -7,6 +7,7 @@ using System.Windows.Threading;
 using PodBridge.App.Platform;
 using PodBridge.App.Ui;
 using PodBridge.Core;
+using PodBridge.Core.Aap;
 using PodBridge.Core.Audio;
 using PodBridge.Core.Ble;
 using PodBridge.Core.Calls;
@@ -50,6 +51,12 @@ internal sealed class AppController : IDisposable
     private readonly Dictionary<ushort, DateTimeOffset> _learnPrompted = [];
     private readonly ModelSightings _sightings = new();
     private readonly BatteryMemory _battery = BatteryStore.Load();
+
+    // Optional advanced features (driver installed separately with admin; off by default).
+    private AapSession? _aap;
+    private bool _driverInstalled;
+    private DateTimeOffset _driverCheckAt = DateTimeOffset.MinValue;
+    private DateTimeOffset _aapRetryAt = DateTimeOffset.MinValue;
     private int? _windowsBattery;
     private DateTimeOffset _windowsBatteryAt = DateTimeOffset.MinValue;
     private readonly HashSet<ushort> _rejected = [];
@@ -81,7 +88,8 @@ internal sealed class AppController : IDisposable
         _presence.Appeared += OnCaseOpened;
         _presence.Updated += s =>
         {
-            if (_battery.Observe(s)) BatteryStore.Save(_battery);
+            // While the advanced session reports exact (1 %) battery, don't overwrite it with 10 % steps.
+            if (_aap?.Battery is null && _battery.Observe(s)) BatteryStore.Save(_battery);
             _card?.UpdateBattery(_battery.View(DateTimeOffset.Now));
             HandleEars(s);
             HandleBattery(s);
@@ -283,6 +291,7 @@ internal sealed class AppController : IDisposable
             _micWarning = null;
             _ear.Reset();
             _media.ForgetPaused();
+            StopAap();
             _windowsBattery = null;
         }
     }
@@ -329,14 +338,77 @@ internal sealed class AppController : IDisposable
 
     // ---------------- Ear detection, battery, switching ----------------
 
-    private void HandleEars(AirPodsStatus s)
+    private void HandleEars(AirPodsStatus s) =>
+        ActOnEars(_ear.Observe((s.LeftInEar ? 1 : 0) + (s.RightInEar ? 1 : 0), s.Timestamp), "advertisement");
+
+    private void ActOnEars(EarAction action, string source)
     {
-        int count = (s.LeftInEar ? 1 : 0) + (s.RightInEar ? 1 : 0);
-        var action = _ear.Observe(count, s.Timestamp);
         // Track state always, act only when the PC is the one playing, and never mid-call.
         if (action == EarAction.None || !_cfg.EarDetection || !_connected || _calls.InCall) return;
-        Log.Write($"Ear detection: {action} ({count} in ear)");
+        Log.Write($"Ear detection: {action} (from {source}, {_ear.InEarCount} in ear)");
         _ = action == EarAction.Pause ? _media.PauseAllAsync() : _media.ResumeAsync();
+    }
+
+    // ---------------- Advanced features (optional driver) ----------------
+
+    private void UpdateAdvanced(DateTimeOffset now)
+    {
+        if (now - _driverCheckAt > TimeSpan.FromSeconds(5))
+        {
+            _driverCheckAt = now;
+            _driverInstalled = AapDriverTransport.IsDriverInstalled();
+        }
+        bool wanted = _cfg.AdvancedFeatures && _driverInstalled && _connected;
+        if (!wanted) { StopAap(); return; }
+        if (_aap is not null || now < _aapRetryAt) return;
+        _aapRetryAt = now + TimeSpan.FromSeconds(10); // a failing driver must not be hammered every tick
+
+        var transport = AapDriverTransport.TryOpen();
+        if (transport is null) return;
+        var session = new AapSession(transport);
+        session.BatteryChanged += b => _ui.BeginInvoke(() => OnAapBattery(b));
+        session.InEarCountChanged += n => _ui.BeginInvoke(() =>
+            ActOnEars(_ear.ObserveExact(n, DateTimeOffset.Now), "AirPods"));
+        session.NoiseModeChanged += _ => _ui.BeginInvoke(RefreshUi);
+        session.ConversationAwarenessChanged += _ => _ui.BeginInvoke(RefreshUi);
+        session.Closed += () => _ui.BeginInvoke(StopAap);
+        _aap = session;
+        Log.Write("Advanced features: session opened");
+        _ = StartAapAsync(session);
+    }
+
+    private async Task StartAapAsync(AapSession session)
+    {
+        try { await session.StartAsync(); }
+        catch (Exception ex) { Log.Write($"Advanced features: start failed: {ex.Message}"); StopAap(); }
+    }
+
+    private void StopAap()
+    {
+        if (_aap is null) return;
+        _aap.Dispose();
+        _aap = null;
+        Log.Write("Advanced features: session closed");
+        RefreshUi();
+    }
+
+    private void OnAapBattery(AapBattery b)
+    {
+        if (_cfg.MyModelId is not ushort id) return;
+        var (l, r, c) = (b.Get(BatteryComponent.Left), b.Get(BatteryComponent.Right), b.Get(BatteryComponent.Case));
+        var s = new AirPodsStatus(id, l?.Percent, r?.Percent, c?.Percent,
+            l?.State == ChargeState.Charging, r?.State == ChargeState.Charging, c?.State == ChargeState.Charging,
+            _ear.InEarCount >= 1, _ear.InEarCount >= 2, 0, DateTimeOffset.Now);
+        if (_battery.Observe(s)) BatteryStore.Save(_battery);
+        HandleBattery(s);
+        RefreshUi();
+    }
+
+    private async Task SendAap(Func<AapSession, Task> command)
+    {
+        if (_aap is null) return;
+        try { await command(_aap); }
+        catch (Exception ex) { Log.Write($"Advanced features: command failed: {ex.Message}"); }
     }
 
     private void HandleBattery(AirPodsStatus s)
@@ -389,6 +461,7 @@ internal sealed class AppController : IDisposable
         try
         {
             UpdateConnection();
+            UpdateAdvanced(now);
             _calls.Tick(_micUsage.Read(), now);
 
             if (_mode.InCallMode && _endpoints?.Mic is { Active: true } mic &&
@@ -461,6 +534,8 @@ internal sealed class AppController : IDisposable
         _settings?.ApplyDevice(new DeviceInfo(
             DeviceTitle, _cfg.MyModelId, _endpoints?.DeviceName, _connected, _mode.InCallMode,
             battery, nearby, _windowsBattery));
+        _settings?.ApplyAdvanced(new AdvancedState(
+            _driverInstalled, _cfg.AdvancedFeatures, _aap is not null, _aap?.NoiseMode, _aap?.ConversationAwareness));
     }
 
     private static string Pct(int? v) => v is int x ? $"{x}%" : "–";
@@ -500,6 +575,10 @@ internal sealed class AppController : IDisposable
         w.LearnClicked += StartLearning;
         w.DiagnosticsClicked += CopyDiagnostics;
         w.BluetoothSettingsClicked += OpenBluetoothSettings;
+        w.AdvancedHelpClicked += () => Process.Start(new ProcessStartInfo(
+            "https://github.com/oskub0t/PodBridge/blob/main/docs/advanced-features.md") { UseShellExecute = true });
+        w.NoiseModeChosen += m => _ = SendAap(a => a.SetNoiseModeAsync(m));
+        w.ConversationAwarenessChosen += on => _ = SendAap(a => a.SetConversationAwarenessAsync(on));
         _settings = w;
         RefreshUi();
         w.Show();
@@ -537,6 +616,8 @@ internal sealed class AppController : IDisposable
             sb.AppendLine($"  0x{s.ModelId:X4}  {AirPodsModels.NameFor(s.ModelId, _cfg.ParsedModelNames()),-24} {s.Rssi} dBm  " +
                           $"{(DateTimeOffset.Now - s.Timestamp).TotalSeconds:0}s ago{(s.ModelId == _cfg.MyModelId ? "  ← yours" : "")}");
 
+        sb.AppendLine().AppendLine($"Advanced features: enabled={_cfg.AdvancedFeatures} driver installed={_driverInstalled} " +
+                                   $"session={(_aap is null ? "none" : $"open, mode={_aap.NoiseMode}, CA={_aap.ConversationAwareness}")}");
         sb.AppendLine().AppendLine($"Windows-reported battery: {_windowsBattery?.ToString() ?? "none"}");
         sb.AppendLine().AppendLine("Raw advertisement bytes (latest per model, strongest first):");
         foreach (var s in _seen.Values.OrderByDescending(x => x.Rssi).Take(12))
@@ -560,6 +641,7 @@ internal sealed class AppController : IDisposable
     public void Dispose()
     {
         _timer.Stop();
+        StopAap();
         _ble.Dispose();
         _tray.Dispose();
     }

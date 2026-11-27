@@ -1,0 +1,124 @@
+# Advanced features (optional, requires administrator)
+
+PodBridge works fully **without** administrator rights. That is the default and always will be:
+`PodBridge.exe` runs "as invoker" and never asks for elevation.
+
+Some AirPods features can only be reached through Apple's private control protocol, and on Windows
+that needs a kernel driver. This document describes the optional **PodBridge AAP driver**: what it
+would unlock, how users opt in, and the contract between the app and the driver.
+
+> **Status:** the app side is built and unit-tested. **The driver does not exist yet.** Building it
+> needs Windows, the WDK and a kernel debugger. Contributions welcome; see [Building the driver](#building-the-driver).
+
+## What it unlocks
+
+| Feature | Without driver (default) | With driver |
+|---|---|---|
+| Battery | 10 % steps, from advertisements | Exact 1 %, pushed by the AirPods |
+| Ear detection | 1–2 s delay, from advertisements | Instant |
+| Noise control (Off / Transparency / Adaptive / Noise Cancellation) | Press and hold the stem | Switch from Settings |
+| Conversation Awareness | Not available | Toggle from Settings |
+| Spatial audio, hearing features, heart rate | Not available | Still not available (see below) |
+
+Spatial audio rendering happens on Apple devices, not in the AirPods. Hearing features reportedly
+require the host to identify as an Apple device. Heart-rate access is unknown. None of these are
+planned.
+
+## How users opt in (two separate, explicit steps)
+
+1. **Install the driver**: a separate download and installer, never bundled into `PodBridge.exe`.
+   Windows shows a UAC prompt. The installer states plainly that it installs a kernel driver.
+2. **Turn it on** in *Settings → Advanced features → Use advanced features*. Off by default, even
+   with the driver installed.
+
+The Settings section is labelled **"Requires administrator · Off by default"** and explains:
+
+- PodBridge works fully without it.
+- Don't install it on a company-managed PC without IT's approval.
+- How to remove it: *Settings → Apps*, or the driver's uninstaller.
+
+If the driver is missing, disabled, or its channel fails, the app silently uses the no-admin
+features. Nothing in the default path depends on it.
+
+## Risks (also shown to users)
+
+- **Kernel code:** a driver bug crashes the whole PC (blue screen), not just the app.
+- **Signing:** 64-bit Windows only loads Microsoft-signed drivers. Without that, the driver needs
+  *test-signing mode* (Secure Boot off, "Test Mode" watermark). That's unsuitable for most PCs and
+  impossible on managed ones.
+- **Undocumented protocol:** Apple can change or block it with any firmware update.
+
+## Architecture
+
+```
+AirPods ──L2CAP PSM 0x1001 (AAP)──► PodBridge AAP driver (KMDF, kernel)
+                                         │  device interface {14937a53-ba6b-4b1f-ba4b-2e3ebe1c57cb}
+                                         ▼  ReadFile / WriteFile, one AAP packet each
+                                    PodBridge.exe (user mode, no admin)
+                                         └─ AapDriverTransport → AapSession → UI / ear detection / battery
+```
+
+- `src/PodBridge.Core/Aap/AapCodec.cs`: packet encoding/decoding (unit-tested)
+- `src/PodBridge.Core/Aap/AapSession.cs`: session start-up, state, commands (unit-tested with a fake transport)
+- `src/PodBridge.App/Platform/AapDriverTransport.cs`: finds and opens the driver's interface
+
+## Driver contract
+
+The app relies on exactly this, so a driver can be written and tested against it independently.
+
+1. **Binding.** The driver is a Bluetooth profile driver for the AirPods' AAP service,
+   UUID `74ec2172-0bad-4d01-8f77-997b2be0722a`. Its INF matches the BTHENUM hardware ID Windows
+   creates for that service on the paired AirPods.
+2. **Channel.** When the device starts, the driver opens an L2CAP channel to the AirPods on
+   PSM `0x1001` (`BRB_L2CA_OPEN_CHANNEL`). It closes it on removal.
+3. **Interface.** While the channel is open, the driver enables device interface
+   `{14937a53-ba6b-4b1f-ba4b-2e3ebe1c57cb}`. It disables it when the channel closes. The interface
+   must be openable by the interactive user (no admin): set a suitable SDDL in the INF.
+4. **I/O.**
+   - `WriteFile`: the buffer is one AAP packet; send it as one L2CAP SDU.
+   - `ReadFile`: complete with exactly one received L2CAP SDU (one AAP packet). Queue reads in
+     order, and drop the oldest if no read is pending and the queue exceeds 64 packets.
+   - When the channel closes, complete pending reads with an error, and fail new I/O.
+5. **No protocol logic in the kernel.** The driver moves bytes; parsing and commands stay in the
+   app, where they're testable and safe to change.
+6. **One open handle at a time** is enough. A second open may fail with `ERROR_ACCESS_DENIED`.
+
+## Protocol (as implemented in `AapCodec`)
+
+From public reverse-engineering notes (the LibrePods project's documentation; no code copied, as
+that project is GPL-licensed). **Unverified on Windows.** All packets start with
+`04 00 04 00 <opcode> 00`, except the handshake.
+
+| Packet | Bytes |
+|---|---|
+| Handshake (first) | `00 00 04 00 01 00 02 00 00 00 00 00 00 00 00 00` |
+| Set feature flags | `04 00 04 00 4D 00 FF 00 00 00 00 00 00 00` |
+| Request notifications | `04 00 04 00 0F 00 FF FF FF FF` |
+| Set noise control | `04 00 04 00 09 00 0D <mode> 00 00 00`, mode `01` off, `02` ANC, `03` transparency, `04` adaptive |
+| Set Conversation Awareness | `04 00 04 00 09 00 28 <01 on / 02 off> 00 00 00` |
+| Battery (in) | `04 00 04 00 04 00 <n>` + n × `<component 02 R/04 L/08 case> 01 <level> <01 charging/02 discharging/04 disconnected> 01` |
+| Ear state (in) | `04 00 04 00 06 00 <primary> <secondary>`, `00` in ear, `01` out, `02` in case |
+| Speech level (in) | `04 00 04 00 4B 00 02 00 01 <level>` |
+
+## Building the driver
+
+Needs a Windows PC with admin, Visual Studio, the **WDK**, and ideally a second machine or VM for
+kernel debugging (Bluetooth pass-through to a VM is unreliable, so a spare laptop is better).
+
+1. KMDF driver based on Microsoft's *Bluetooth Echo L2CAP profile driver* sample
+   (`bthecho`, Windows-driver-samples), client side.
+2. Implement the contract above. Start with logging every received packet; the app's
+   *Copy Diagnostics* will show what the session sees.
+3. Test-sign: `bcdedit /set testsigning on` on the test PC only, then install with `pnputil /add-driver podbridge-aap.inf /install`.
+4. Validate with real AirPods: handshake → notifications → battery → noise-control switching.
+5. Release: Microsoft attestation signing through Partner Center (needs an EV code-signing
+   certificate). An installer (or `pnputil`) for install and uninstall.
+
+## Test plan for the first driver build
+
+- [ ] Interface appears when AirPods connect, disappears when they disconnect
+- [ ] App opens it as a normal user (no admin)
+- [ ] Handshake + notifications produce battery and ear packets within a few seconds
+- [ ] Noise control changes from Settings are confirmed by the AirPods (mode packet echoed)
+- [ ] Unplugging/turning off Bluetooth mid-session: no crash, app falls back cleanly
+- [ ] Driver Verifier enabled during all of the above

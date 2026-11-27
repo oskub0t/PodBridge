@@ -23,12 +23,21 @@ one self-contained file, no installer, no .NET needed, Windows 10 (2004+) or 11,
 > **Why not "when Teams starts"?** Teams runs all day. Switching then would leave you in mono
 > headset quality permanently. A call is detected when Teams actually opens the microphone.
 
-### What isn't possible without admin (and why)
+### Optional: advanced features (require administrator, off by default)
 
-Noise-control switching, Conversation Awareness, Adaptive Audio, spatial audio, exact 1 % battery,
-renaming, hearing features and heart rate all go through Apple's private protocol over a Bluetooth
-L2CAP channel. Windows only lets a **kernel driver** open L2CAP channels, and drivers need admin.
-The AirPods' own controls still work on Windows by themselves: press for play/pause, press
+Noise-control switching, Conversation Awareness, exact 1 % battery and instant ear detection go
+through Apple's private protocol over a Bluetooth L2CAP channel. Windows only lets a **kernel
+driver** open those channels, and installing a driver needs admin. PodBridge has an **optional**
+path for this. You install a separate driver (with a UAC prompt), then turn it on in
+*Settings → Advanced features*. Without the driver, which is the default, everything above works
+as normal and `PodBridge.exe` never asks for elevation.
+
+**The driver isn't available yet.** The app side is built; the driver needs a Windows kernel
+developer. See [docs/advanced-features.md](docs/advanced-features.md) for the design, risks and
+the contract a driver has to meet. Spatial audio, hearing features and heart rate aren't possible
+even with a driver.
+
+Without the driver, the AirPods' own controls still work on Windows: press for play/pause, press
 twice/three times for skip/back, press and hold to switch Noise Cancellation/Transparency, swipe
 the stem for volume.
 
@@ -120,9 +129,10 @@ every push; pushing a `v*` tag publishes the exe to a GitHub Release. The exe in
 updated for releases only, because every committed copy stays in the git history.
 
 ```
-src/PodBridge.Core     platform-free logic, unit-tested (parser, filter, calls, audio modes, features)
+src/PodBridge.Core     platform-free logic, unit-tested (parser, filter, calls, audio modes, features, AAP protocol)
 src/PodBridge.App      WPF tray app: Platform/ (BLE, Core Audio COM, registry, media), Ui/ (windows, theme)
 tests/                 xUnit, including captured real-world advertisements
+docs/                  advanced-features.md: optional admin-only driver design
 ```
 
 ## Status

@@ -116,6 +116,47 @@
                 </StackPanel>
             </Border>
 
+            <!-- Advanced features: optional, OFF by default, need a separately installed driver (admin) -->
+            <TextBlock Style="{StaticResource Header}" Text="ADVANCED FEATURES"/>
+            <Border Style="{StaticResource Group}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource RowLabel}" FontWeight="SemiBold" Margin="10,12,10,6"
+                               Text="Noise control, Conversation Awareness, exact battery"/>
+                    <Border HorizontalAlignment="Left" Margin="10,0,10,8" CornerRadius="6" Padding="8,3"
+                            Background="{DynamicResource FillHoverBrush}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock FontFamily="{StaticResource Icons}" Text="&#xEA18;" FontSize="12" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource WarnBrush}" Margin="0,0,6,0"/>
+                            <TextBlock Style="{StaticResource Secondary}" FontSize="12" FontWeight="SemiBold"
+                                       Text="Requires administrator · Off by default"/>
+                        </StackPanel>
+                    </Border>
+                    <TextBlock x:Name="AdvancedNote" Style="{StaticResource RowNote}"/>
+                    <Rectangle Style="{StaticResource Divider}"/>
+                    <CheckBox x:Name="AdvancedSw" Style="{StaticResource Switch}" Content="Use advanced features"/>
+
+                    <StackPanel x:Name="AdvancedControls" Visibility="Collapsed">
+                        <Rectangle Style="{StaticResource Divider}"/>
+                        <TextBlock Style="{StaticResource RowLabel}" Margin="10,10,10,6" Text="Noise Control"/>
+                        <Border Style="{StaticResource Group}" Margin="10,0,10,10" Background="{DynamicResource FillHoverBrush}">
+                            <UniformGrid Columns="4">
+                                <RadioButton x:Name="NcOff" Style="{StaticResource Segment}" GroupName="Nc" Content="Off"/>
+                                <RadioButton x:Name="NcTransparency" Style="{StaticResource Segment}" GroupName="Nc" Content="Transparency"/>
+                                <RadioButton x:Name="NcAdaptive" Style="{StaticResource Segment}" GroupName="Nc" Content="Adaptive"/>
+                                <RadioButton x:Name="NcAnc" Style="{StaticResource Segment}" GroupName="Nc" Content="Noise Cancellation"/>
+                            </UniformGrid>
+                        </Border>
+                        <Rectangle Style="{StaticResource Divider}"/>
+                        <CheckBox x:Name="CaSw" Style="{StaticResource Switch}" Content="Conversation Awareness"/>
+                        <TextBlock Style="{StaticResource RowNote}"
+                                   Text="Lowers media and brings voices forward when you start talking."/>
+                    </StackPanel>
+
+                    <Button x:Name="AdvancedHelpBtn" Style="{StaticResource TextButton}" HorizontalAlignment="Left"
+                            Margin="2,0,0,6" Content="How advanced features work…"/>
+                </StackPanel>
+            </Border>
+
             <!-- What the AirPods do on their own -->
             <TextBlock Style="{StaticResource Header}" Text="ON YOUR AIRPODS"/>
             <Border Style="{StaticResource Group}" Padding="10,8">

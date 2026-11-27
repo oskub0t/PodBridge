@@ -40,6 +40,14 @@ public sealed class PodBridgeConfig
     /// </summary>
     public bool LaptopMicOutsideCalls { get; set; } = true;
 
+    /// <summary>
+    /// Advanced features (noise control, Conversation Awareness, exact battery, instant ear
+    /// detection). OFF by default, and only usable once the separately installed PodBridge driver
+    /// is present, which needs administrator rights to install. Without it PodBridge runs the
+    /// no-admin features only.
+    /// </summary>
+    public bool AdvancedFeatures { get; set; }
+
     /// <summary>Windows 11 Acrylic/Mica behind cards. Turn off if your PC renders them oddly.</summary>
     public bool UseSystemMaterials { get; set; } = true;
 

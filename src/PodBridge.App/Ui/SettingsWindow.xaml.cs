@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Threading;
 using PodBridge.App.Platform;
 using PodBridge.Core;
+using PodBridge.Core.Aap;
 using PodBridge.Core.Ble;
 using PodBridge.Core.Features;
 
@@ -18,13 +19,20 @@ public sealed record DeviceInfo(
 /// Mica background, scroll bars, combo box and buttons are native Windows controls. That matches how
 /// Apple's own Windows apps look.
 /// </summary>
+/// <param name="DriverInstalled">The optional PodBridge driver is on this PC.</param>
+/// <param name="Active">A control session with the AirPods is open right now.</param>
+public sealed record AdvancedState(bool DriverInstalled, bool Enabled, bool Active, NoiseMode? NoiseMode, bool? ConversationAwareness);
+
 public partial class SettingsWindow : Window
 {
     private static readonly SwitchPolicy[] PolicyOrder = [SwitchPolicy.Automatically, SwitchPolicy.Ask, SwitchPolicy.Never];
     private readonly PodBridgeConfig _cfg;
     private bool _loading;
 
-    public event Action? ConfigChanged, ConnectToggled, LearnClicked, DiagnosticsClicked, BluetoothSettingsClicked;
+    public event Action? ConfigChanged, ConnectToggled, LearnClicked, DiagnosticsClicked, BluetoothSettingsClicked, AdvancedHelpClicked;
+    public event Action<NoiseMode>? NoiseModeChosen;
+    public event Action<bool>? ConversationAwarenessChosen;
+    private bool _applyingAdvanced;
 
     public SettingsWindow(PodBridgeConfig cfg)
     {
@@ -56,6 +64,13 @@ public partial class SettingsWindow : Window
         Bind(LowBatterySw, v => _cfg.LowBatteryAlerts = v);
         Bind(LaptopMicSw, v => _cfg.LaptopMicOutsideCalls = v);
         Bind(MaterialsSw, v => { _cfg.UseSystemMaterials = v; CardChrome.UseMaterials = v; });
+        Bind(AdvancedSw, v => _cfg.AdvancedFeatures = v);
+        AdvancedHelpBtn.Click += (_, _) => AdvancedHelpClicked?.Invoke();
+        foreach (var (rb, mode) in new[] { (NcOff, NoiseMode.Off), (NcTransparency, NoiseMode.Transparency),
+                                           (NcAdaptive, NoiseMode.Adaptive), (NcAnc, NoiseMode.NoiseCancellation) })
+            rb.Checked += (_, _) => { if (!_applyingAdvanced) NoiseModeChosen?.Invoke(mode); };
+        CaSw.Checked += (_, _) => { if (!_applyingAdvanced) ConversationAwarenessChosen?.Invoke(true); };
+        CaSw.Unchecked += (_, _) => { if (!_applyingAdvanced) ConversationAwarenessChosen?.Invoke(false); };
         LoginSw.Checked += (_, _) => { if (!_loading) Autostart.Set(true); };
         LoginSw.Unchecked += (_, _) => { if (!_loading) Autostart.Set(false); };
     }
@@ -71,6 +86,7 @@ public partial class SettingsWindow : Window
         SilentMicSw.IsChecked = _cfg.SilentMicWarningSeconds > 0;
         LowBatterySw.IsChecked = _cfg.LowBatteryAlerts;
         LaptopMicSw.IsChecked = _cfg.LaptopMicOutsideCalls;
+        AdvancedSw.IsChecked = _cfg.AdvancedFeatures;
         LoginSw.IsChecked = Autostart.IsEnabled;
         MaterialsSw.IsChecked = _cfg.UseSystemMaterials;
         MaterialsSw.IsEnabled = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22621);
@@ -106,5 +122,31 @@ public partial class SettingsWindow : Window
                 : $"Not recognised (0x{id:X4})")
             : "–";
         BtNameText.Text = d.BluetoothName ?? "–";
+    }
+
+    public void ApplyAdvanced(AdvancedState a)
+    {
+        _applyingAdvanced = true;
+        try
+        {
+            AdvancedSw.IsEnabled = a.DriverInstalled;
+            AdvancedNote.Text = (a.DriverInstalled, a.Enabled, a.Active) switch
+            {
+                (false, _, _) =>
+                    "These need the optional PodBridge driver, installed separately with administrator rights. " +
+                    "PodBridge works fully without it. Don't install it on a company-managed PC without IT's approval. " +
+                    "The driver isn't available yet.",
+                (true, false, _) => "The PodBridge driver is installed. Turn this on to use it with your AirPods.",
+                (true, true, false) => "Waiting for your AirPods to connect…",
+                _ => "Connected to your AirPods.",
+            };
+            AdvancedControls.Visibility = a.Enabled && a.Active ? Visibility.Visible : Visibility.Collapsed;
+            NcOff.IsChecked = a.NoiseMode == NoiseMode.Off;
+            NcTransparency.IsChecked = a.NoiseMode == NoiseMode.Transparency;
+            NcAdaptive.IsChecked = a.NoiseMode == NoiseMode.Adaptive;
+            NcAnc.IsChecked = a.NoiseMode == NoiseMode.NoiseCancellation;
+            CaSw.IsChecked = a.ConversationAwareness == true;
+        }
+        finally { _applyingAdvanced = false; }
     }
 }
