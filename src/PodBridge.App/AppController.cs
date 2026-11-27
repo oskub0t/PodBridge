@@ -52,6 +52,10 @@ internal sealed class AppController : IDisposable
     private readonly ModelSightings _sightings = new();
     private readonly BatteryMemory _battery = BatteryStore.Load();
 
+    // Recent changes of the in-ear status byte, for diagnosing the in-ear mapping on new models.
+    private readonly Queue<string> _earLog = new();
+    private byte? _lastRawStatus;
+
     // Optional advanced features (driver installed separately with admin; off by default).
     private AapSession? _aap;
     private bool _driverInstalled;
@@ -338,8 +342,21 @@ internal sealed class AppController : IDisposable
 
     // ---------------- Ear detection, battery, switching ----------------
 
-    private void HandleEars(AirPodsStatus s) =>
-        ActOnEars(_ear.Observe((s.LeftInEar ? 1 : 0) + (s.RightInEar ? 1 : 0), s.Timestamp), "advertisement");
+    private void HandleEars(AirPodsStatus s)
+    {
+        int count = (s.LeftInEar ? 1 : 0) + (s.RightInEar ? 1 : 0);
+        if (s.RawStatus != _lastRawStatus)
+        {
+            _lastRawStatus = s.RawStatus;
+            var entry = $"{s.Timestamp.LocalDateTime:HH:mm:ss}  status 0x{s.RawStatus:X2} " +
+                        $"(bits {Convert.ToString(s.RawStatus, 2).PadLeft(8, '0')})  read as L={(s.LeftInEar ? "in" : "out")} " +
+                        $"R={(s.RightInEar ? "in" : "out")} → {count} in ear";
+            _earLog.Enqueue(entry);
+            while (_earLog.Count > 30) _earLog.Dequeue();
+            Log.Write("Ear status: " + entry);
+        }
+        ActOnEars(_ear.Observe(count, s.Timestamp), "advertisement");
+    }
 
     private void ActOnEars(EarAction action, string source)
     {
@@ -618,6 +635,9 @@ internal sealed class AppController : IDisposable
 
         sb.AppendLine().AppendLine($"Advanced features: enabled={_cfg.AdvancedFeatures} driver installed={_driverInstalled} " +
                                    $"session={(_aap is null ? "none" : $"open, mode={_aap.NoiseMode}, CA={_aap.ConversationAwareness}")}");
+        sb.AppendLine().AppendLine("In-ear status changes (newest last):");
+        foreach (var line in _earLog) sb.AppendLine("  " + line);
+
         sb.AppendLine().AppendLine($"Windows-reported battery: {_windowsBattery?.ToString() ?? "none"}");
         sb.AppendLine().AppendLine("Raw advertisement bytes (latest per model, strongest first):");
         foreach (var s in _seen.Values.OrderByDescending(x => x.Rssi).Take(12))

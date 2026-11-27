@@ -32,7 +32,7 @@ public partial class ConnectCard : Window
         KeyDown += (_, e) => { if (e.Key == Key.Escape) Dismiss(); };
         Loaded += (_, _) =>
         {
-            CardPlacement.PlaceNearTray(this, CardChrome.MaterialsAvailable);
+            CardPlacement.AnchorNearTray(this, CardChrome.MaterialsAvailable);
             CardPlacement.AnimateIn(this);
         };
     }

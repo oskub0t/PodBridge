@@ -204,6 +204,7 @@ public class CapturedAdvertTests
         Assert.Equal(100, s.RightPercent);
         Assert.Null(s.CasePercent);
         Assert.True(AirPodsModels.LooksValid(s.ModelId));
+        Assert.Equal(0x23, s.RawStatus); // kept for in-ear mapping diagnostics
     }
 
     [Fact]

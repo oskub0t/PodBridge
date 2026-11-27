@@ -1,4 +1,6 @@
+using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 
@@ -13,6 +15,16 @@ internal static class CardPlacement
 {
     private const double Rise = 16;
 
+    /// <summary>
+    /// Places the card by the tray and keeps its bottom edge anchored there when its height
+    /// changes (content updates after it's shown), the way Windows' own flyouts behave.
+    /// </summary>
+    public static void AnchorNearTray(Window w, bool usesSystemChrome = false)
+    {
+        PlaceNearTray(w, usesSystemChrome);
+        w.SizeChanged += (_, _) => PlaceNearTray(w, usesSystemChrome);
+    }
+
     public static void PlaceNearTray(Window w, bool usesSystemChrome = false)
     {
         // Windows 11 flyouts sit 12 px off the screen edge; drawn cards carry their own margin.
@@ -23,12 +35,40 @@ internal static class CardPlacement
         double width = w.ActualWidth > 0 ? w.ActualWidth : w.Width;
         double height = w.ActualHeight > 0 ? w.ActualHeight : 300;
 
+        // The window rectangle can be larger than what's visible (invisible frame borders);
+        // place by the visible edges so the gap really is 12 px on every side.
+        var hidden = InvisibleFrame(w);
+
         bool taskbarTop = area.Top > 0;
         bool taskbarLeft = area.Left > 0 && area.Width < screenW;
 
-        w.Left = taskbarLeft ? area.Left + gap : area.Right - width - gap;
-        w.Top = taskbarTop ? area.Top + gap : area.Bottom - height - gap;
+        w.Left = taskbarLeft ? area.Left + gap - hidden.Left : area.Right - width - gap + hidden.Right;
+        w.Top = taskbarTop ? area.Top + gap - hidden.Top : area.Bottom - height - gap + hidden.Bottom;
     }
+
+    /// <summary>How far the window rectangle extends beyond its visible frame, in WPF units.</summary>
+    private static Thickness InvisibleFrame(Window w)
+    {
+        var hwnd = new WindowInteropHelper(w).Handle;
+        if (hwnd == IntPtr.Zero || !GetWindowRect(hwnd, out var wr) ||
+            DwmGetWindowAttribute(hwnd, DwmwaExtendedFrameBounds, out var fr, Marshal.SizeOf<Rect>()) != 0)
+            return default;
+        var m = PresentationSource.FromVisual(w)?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
+        return new Thickness(
+            Math.Max(0, fr.Left - wr.Left) * m.M11, Math.Max(0, fr.Top - wr.Top) * m.M22,
+            Math.Max(0, wr.Right - fr.Right) * m.M11, Math.Max(0, wr.Bottom - fr.Bottom) * m.M22);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Rect { public int Left, Top, Right, Bottom; }
+
+    private const int DwmwaExtendedFrameBounds = 9;
+
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr hwnd, out Rect rect);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out Rect value, int size);
 
     public static void AnimateIn(Window w)
     {

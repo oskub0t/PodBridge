@@ -24,7 +24,7 @@ public partial class Hud : Window
             kind == HudKind.Warning ? "WarnBrush" : "GoodBrush");
         hud.Loaded += (_, _) =>
         {
-            CardPlacement.PlaceNearTray(hud);
+            CardPlacement.AnchorNearTray(hud);
             CardPlacement.AnimateIn(hud);
         };
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(seconds) };
