@@ -97,7 +97,7 @@ nearby. **Read it and remove anything private before pasting it into a public is
 - `CallApps`: add your conferencing apps (substring of the mic-usage key)
 - `LaptopMicOutsideCalls` (true): keep the PC's mic as the everyday default
 - `MusicOutputName` / `CallOutputName` / `MicName`: pin exact endpoint names if auto-detect picks wrong
-- `ModelNames`: name a model the app doesn't know yet, e.g. `{ "0x3620": "AirPods …" }`
+- `ModelNames`: name a model the app doesn't know yet, e.g. `{ "0x4220": "AirPods …" }`
 
 ## Known AirPods advertisement formats
 
@@ -110,11 +110,11 @@ model IDs all end in `0x20`. See `tests/PodBridge.Core.Tests/FeatureTests.cs` fo
 | `0x0220` / `0x0F20` / `0x1320` | AirPods 1st / 2nd / 3rd gen |
 | `0x1920` | AirPods 4 |
 | `0x1B20` | AirPods 4 with ANC (less certain) |
+| `0x3620` | AirPods 5 (confirmed in the field) |
 | `0x0E20` | AirPods Pro |
 | `0x1420` / `0x2420` | AirPods Pro 2 (Lightning / USB-C) |
 | `0x2720` | AirPods Pro 3 (confirmed in the field) |
 | `0x0A20` / `0x1F20` | AirPods Max (Lightning / USB-C) |
-| `0x3620` | seen in the field, unknown |
 
 Contributions of confirmed IDs are welcome (open the case, *Copy Diagnostics*, look for the
 strongest `0x…20` entry).

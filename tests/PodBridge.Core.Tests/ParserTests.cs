@@ -81,6 +81,7 @@ public class ParserTests
 
     [Theory]
     [InlineData((ushort)0x2720, "AirPods Pro 3")]
+    [InlineData((ushort)0x3620, "AirPods 5")]
     [InlineData((ushort)0x1920, "AirPods 4")]
     [InlineData((ushort)0x1420, "AirPods Pro 2")]
     [InlineData((ushort)0x2420, "AirPods Pro 2 (USB-C)")]
@@ -94,9 +95,9 @@ public class ParserTests
     [Fact]
     public void Unknown_model_gets_readable_name_and_config_override_wins()
     {
-        Assert.Equal("Apple audio device 0x3620", AirPodsModels.NameFor(0x3620));
-        var extra = new Dictionary<ushort, string> { [0x3620] = "My AirPods" };
-        Assert.Equal("My AirPods", AirPodsModels.NameFor(0x3620, extra));
+        Assert.Equal("Apple audio device 0x4220", AirPodsModels.NameFor(0x4220));
+        var extra = new Dictionary<ushort, string> { [0x4220] = "My AirPods" };
+        Assert.Equal("My AirPods", AirPodsModels.NameFor(0x4220, extra));
     }
 
     [Fact]

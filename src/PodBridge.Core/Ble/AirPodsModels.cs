@@ -15,6 +15,7 @@ public static class AirPodsModels
         [0x1320] = "AirPods (3rd gen)",
         [0x1920] = "AirPods 4",
         [0x1B20] = "AirPods 4 (ANC)",        // less certain
+        [0x3620] = "AirPods 5",              // confirmed in the field
         [0x0E20] = "AirPods Pro",
         [0x1420] = "AirPods Pro 2",
         [0x2420] = "AirPods Pro 2 (USB-C)",
