@@ -54,41 +54,91 @@ public class AutoConnectPolicyTests
     private static readonly DateTimeOffset T0 = new(2026, 11, 27, 9, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public void Default_waits_for_an_ear_not_the_case()
+    public void Opening_the_case_never_connects_by_default()
     {
         var cfg = new PodBridgeConfig();
         var p = new AutoConnectPolicy();
         Assert.Equal(ConnectTrigger.PutInEar, cfg.ConnectWhen);
         Assert.False(p.OnCaseOpened(cfg, false, false, T0));
-        Assert.False(p.OnInEarCount(cfg, 0, false, false, T0));
-        Assert.True(p.OnInEarCount(cfg, 1, false, false, T0));
     }
 
     [Fact]
-    public void Case_open_mode_connects_on_open()
+    public void First_reading_is_only_a_baseline_even_if_it_says_in_ear()
     {
-        var cfg = new PodBridgeConfig { ConnectWhen = ConnectTrigger.CaseOpens };
+        // The field bug: AirPods charging in an open case were read as "in ear" and connected.
         var p = new AutoConnectPolicy();
-        Assert.False(p.OnInEarCount(cfg, 2, false, false, T0));
-        Assert.True(p.OnCaseOpened(cfg, false, false, T0));
+        Assert.False(p.OnInEarCount(new PodBridgeConfig(), 1, false, false, T0));
+        Assert.False(p.OnInEarCount(new PodBridgeConfig(), 1, false, false, T0.AddSeconds(1)));
     }
 
     [Fact]
-    public void Never_connected_twice_within_cooldown_or_when_off()
+    public void Putting_a_bud_in_connects()
     {
         var cfg = new PodBridgeConfig();
         var p = new AutoConnectPolicy();
-        Assert.True(p.OnInEarCount(cfg, 1, false, false, T0));
-        Assert.False(p.OnInEarCount(cfg, 2, false, false, T0.AddSeconds(5)));
-        Assert.True(p.OnInEarCount(cfg, 2, false, false, T0.AddSeconds(20)));
+        p.OnInEarCount(cfg, 0, false, false, T0);
+        Assert.True(p.OnInEarCount(cfg, 1, false, false, T0.AddSeconds(2)));
+    }
 
-        cfg.AutoConnect = false;
-        Assert.False(new AutoConnectPolicy().OnInEarCount(cfg, 2, false, false, T0));
+    [Fact]
+    public void Case_open_mode_connects_on_open_and_ignores_ears()
+    {
+        var cfg = new PodBridgeConfig { ConnectWhen = ConnectTrigger.CaseOpens };
+        var p = new AutoConnectPolicy();
+        p.OnInEarCount(cfg, 0, false, false, T0);
+        Assert.False(p.OnInEarCount(cfg, 2, false, false, T0));
+        Assert.True(p.OnCaseOpened(cfg, false, false, T0.AddSeconds(20)));
+    }
+
+    [Fact]
+    public void Cooldown_and_off_switch()
+    {
+        var cfg = new PodBridgeConfig();
+        var p = new AutoConnectPolicy();
+        p.OnInEarCount(cfg, 0, false, false, T0);
+        Assert.True(p.OnInEarCount(cfg, 1, false, false, T0));
+        p.OnInEarCount(cfg, 0, false, false, T0.AddSeconds(2));
+        Assert.False(p.OnInEarCount(cfg, 1, false, false, T0.AddSeconds(5)));   // within cooldown
+        p.OnInEarCount(cfg, 0, false, false, T0.AddSeconds(18));
+        Assert.True(p.OnInEarCount(cfg, 1, false, false, T0.AddSeconds(20)));
+
+        var off = new PodBridgeConfig { AutoConnect = false };
+        var q = new AutoConnectPolicy();
+        q.OnInEarCount(off, 0, false, false, T0);
+        Assert.False(q.OnInEarCount(off, 2, false, false, T0));
     }
 
     [Theory]
     [InlineData(true, false)]   // already connected
     [InlineData(false, true)]   // user just disconnected
-    public void Respects_state(bool connected, bool recentlyDisconnected) =>
-        Assert.False(new AutoConnectPolicy().OnInEarCount(new PodBridgeConfig(), 2, connected, recentlyDisconnected, T0));
+    public void Respects_state(bool connected, bool recentlyDisconnected)
+    {
+        var p = new AutoConnectPolicy();
+        p.OnInEarCount(new PodBridgeConfig(), 0, connected, recentlyDisconnected, T0);
+        Assert.False(p.OnInEarCount(new PodBridgeConfig(), 2, connected, recentlyDisconnected, T0));
+    }
+
+    [Fact]
+    public void Reset_starts_a_new_baseline()
+    {
+        var p = new AutoConnectPolicy();
+        p.OnInEarCount(new PodBridgeConfig(), 0, false, false, T0);
+        p.ResetBaseline();
+        Assert.False(p.OnInEarCount(new PodBridgeConfig(), 2, false, false, T0)); // baseline again
+    }
+}
+
+public class ChargingMeansInCaseTests
+{
+    private static AirPodsStatus S(bool lIn, bool rIn, bool lCh, bool rCh) =>
+        new(0x2720, 80, 80, 60, lCh, rCh, false, lIn, rIn, -50, DateTimeOffset.UnixEpoch);
+
+    [Fact]
+    public void Charging_pods_are_never_in_an_ear() => Assert.Equal(0, S(true, true, true, true).InEarCount);
+
+    [Fact]
+    public void Worn_pods_count() => Assert.Equal(2, S(true, true, false, false).InEarCount);
+
+    [Fact]
+    public void One_out_charging_one_worn() => Assert.Equal(1, S(true, true, true, false).InEarCount);
 }

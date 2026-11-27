@@ -22,6 +22,13 @@ public sealed record AirPodsStatus(
     /// <summary>The raw lid byte (described as a lid open counter), for finding a "lid closed" signal.</summary>
     public byte RawLid { get; init; }
 
+    /// <summary>
+    /// Pods counted as in an ear. A pod that reports charging is in the case, whatever the in-ear
+    /// bits say: those bits are not fully understood for every model (AirPods Pro 3 read "in ear"
+    /// while charging in an open case), and charging is unambiguous.
+    /// </summary>
+    public int InEarCount => (LeftInEar && !LeftCharging ? 1 : 0) + (RightInEar && !RightCharging ? 1 : 0);
+
     /// <summary>Lowest known pod battery, used for the tray icon.</summary>
     public int? LowestPodPercent =>
         (LeftPercent, RightPercent) switch

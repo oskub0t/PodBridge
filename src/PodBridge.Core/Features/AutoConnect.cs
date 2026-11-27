@@ -9,18 +9,32 @@ public enum ConnectTrigger
     CaseOpens,
 }
 
-/// <summary>Decides when to ask Windows to connect, with a cooldown so a failing connect isn't retried every advert.</summary>
+/// <summary>
+/// Decides when to ask Windows to connect, with a cooldown so a failing connect isn't retried every
+/// advert. "Put them in" fires only when the in-ear count goes UP compared with an earlier reading.
+/// The first reading after the lid opens is just a baseline, so AirPods sitting in the case (or a
+/// misread in-ear bit) never trigger a connect on their own.
+/// </summary>
 public sealed class AutoConnectPolicy
 {
     private DateTimeOffset _lastAttempt = DateTimeOffset.MinValue;
+    private int? _lastInEar;
 
     public TimeSpan Cooldown { get; init; } = TimeSpan.FromSeconds(15);
 
     public bool OnCaseOpened(PodBridgeConfig c, bool connected, bool userRecentlyDisconnected, DateTimeOffset now) =>
         Decide(c.AutoConnect && c.ConnectWhen == ConnectTrigger.CaseOpens, connected, userRecentlyDisconnected, now);
 
-    public bool OnInEarCount(PodBridgeConfig c, int inEar, bool connected, bool userRecentlyDisconnected, DateTimeOffset now) =>
-        Decide(c.AutoConnect && c.ConnectWhen == ConnectTrigger.PutInEar && inEar > 0, connected, userRecentlyDisconnected, now);
+    public bool OnInEarCount(PodBridgeConfig c, int inEar, bool connected, bool userRecentlyDisconnected, DateTimeOffset now)
+    {
+        bool wentIn = _lastInEar is int before && inEar > before;
+        _lastInEar = inEar;
+        return Decide(c.AutoConnect && c.ConnectWhen == ConnectTrigger.PutInEar && wentIn,
+            connected, userRecentlyDisconnected, now);
+    }
+
+    /// <summary>Forget the baseline (the AirPods went away; the next reading starts fresh).</summary>
+    public void ResetBaseline() => _lastInEar = null;
 
     private bool Decide(bool wanted, bool connected, bool recentlyDisconnected, DateTimeOffset now)
     {

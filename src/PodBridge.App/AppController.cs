@@ -210,6 +210,7 @@ internal sealed class AppController : IDisposable
 
     private void OnCaseOpened(AirPodsStatus s)
     {
+        _autoConnect.ResetBaseline(); // the reading right after the lid opens is a baseline, not "went in"
         Log.Write($"Case opened: L{s.LeftPercent} R{s.RightPercent} C{s.CasePercent} rssi {s.Rssi}");
         UpdateConnection();
 
@@ -426,14 +427,14 @@ internal sealed class AppController : IDisposable
 
     private void HandleEars(AirPodsStatus s)
     {
-        int count = (s.LeftInEar ? 1 : 0) + (s.RightInEar ? 1 : 0);
+        int count = s.InEarCount; // charging pods count as in the case
         if (s.RawStatus != _lastRawStatus || s.RawLid != _lastRawLid)
         {
             _lastRawStatus = s.RawStatus;
             _lastRawLid = s.RawLid;
             var entry = $"{s.Timestamp.LocalDateTime:HH:mm:ss}  lid 0x{s.RawLid:X2}  status 0x{s.RawStatus:X2} " +
                         $"(bits {Convert.ToString(s.RawStatus, 2).PadLeft(8, '0')})  read as L={(s.LeftInEar ? "in" : "out")} " +
-                        $"R={(s.RightInEar ? "in" : "out")} → {count} in ear";
+                        $"R={(s.RightInEar ? "in" : "out")} charging L={s.LeftCharging} R={s.RightCharging} → {count} in ear";
             _earLog.Enqueue(entry);
             while (_earLog.Count > 30) _earLog.Dequeue();
             Log.Write("Ear status: " + entry);
