@@ -62,6 +62,12 @@ public sealed class PodBridgeConfig
     public bool UseSystemMaterials { get; set; } = true;
 
     /// <summary>
+    /// Ask Windows to deliver only Apple Bluetooth advertisements. Turn off if your AirPods are
+    /// noticed less reliably with it (some adapters filter in hardware with different timing).
+    /// </summary>
+    public bool BluetoothFilter { get; set; } = true;
+
+    /// <summary>
     /// Substrings matched against the microphone-usage keys Windows keeps per app. New Teams is the
     /// packaged app "MSTeams_8wekyb3d8bbwe"; classic Teams shows up as a path ending in Teams.exe.
     /// </summary>

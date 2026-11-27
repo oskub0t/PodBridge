@@ -114,6 +114,9 @@ nearby. **Read it and remove anything private before pasting it into a public is
 
 - `ConnectWhen` (`PutInEar`): or `CaseOpens`; `AutoConnect: false` turns automatic connecting off
 - `MinRssi` (-70): raise to -60 if a nearby identical model still triggers it
+- `BluetoothFilter` (true): Windows delivers only Apple Bluetooth adverts to PodBridge. If your
+  AirPods are noticed less reliably, set it to false (Copy Diagnostics → *Performance* shows how
+  often they're heard either way)
 - `CallApps`: add your conferencing apps (substring of the mic-usage key)
 - `LaptopMicOutsideCalls` (true): keep the PC's mic as the everyday default
 - `MusicOutputName` / `CallOutputName` / `MicName`: pin exact endpoint names if auto-detect picks wrong

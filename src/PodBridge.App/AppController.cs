@@ -35,7 +35,21 @@ internal sealed class AppController : IDisposable
     private readonly Dispatcher _ui = Dispatcher.CurrentDispatcher;
     private readonly PodBridgeConfig _cfg = ConfigStore.Load();
     private readonly WindowsAudio _audio = new();
-    private readonly BleScanner _ble = new();
+    private readonly BleScanner _ble;
+
+    // Mic-usage record: read when Windows reports a change (plus a slow safety check), not every second.
+    private RegistryWatcher? _micWatcher;
+    private IReadOnlyList<MicUsageEntry> _micEntries = [];
+    private volatile bool _micDirty = true;
+    private DateTimeOffset _micReadAt = DateTimeOffset.MinValue;
+
+    // Performance figures for diagnostics, refreshed once a minute.
+    private readonly System.Diagnostics.Process _self = System.Diagnostics.Process.GetCurrentProcess();
+    private DateTimeOffset _perfAt = DateTimeOffset.Now;
+    private TimeSpan _perfCpu;
+    private (long Delivered, long Apple, long Parsed) _perfCounts;
+    private long _myAdverts, _perfMyAdverts;
+    private string _perfSummary = "measuring (first figures after one minute)";
     private readonly RegistryMicUsageSource _micUsage = new();
     private readonly PresenceTracker _presence;
     private readonly CallDetector _calls;
@@ -97,6 +111,14 @@ internal sealed class AppController : IDisposable
 
     public AppController()
     {
+        _ble = new BleScanner(_cfg.BluetoothFilter);
+        _perfCpu = _self.TotalProcessorTime;
+        try
+        {
+            _micWatcher = new RegistryWatcher(Microsoft.Win32.Registry.CurrentUser, RegistryMicUsageSource.Root);
+            _micWatcher.Changed += () => { _micDirty = true; _ui.BeginInvoke(CheckCalls); };
+        }
+        catch (Exception ex) { Log.Write($"Mic watcher unavailable, polling instead: {ex.Message}"); }
         _presence = new PresenceTracker(() => _cfg);
         _calls = new CallDetector(() => _cfg);
         _mode = new AudioModeController(_audio, () => _cfg, Log.Write);
@@ -116,6 +138,7 @@ internal sealed class AppController : IDisposable
         };
         _presence.Updated += s =>
         {
+            _myAdverts++;
             // While the advanced session reports exact (1 %) battery, don't overwrite it with 10 % steps.
             if (_aap?.Battery is null && _battery.Observe(s)) BatteryStore.Save(_battery);
             _card?.UpdateBattery(_battery.View(DateTimeOffset.Now));
@@ -639,7 +662,8 @@ internal sealed class AppController : IDisposable
                 _ = CheckForUpdatesAsync(manual: false);
             UpdateConnection();
             UpdateAdvanced(now);
-            _calls.Tick(_micUsage.Read(), now);
+            CheckCalls();
+            UpdatePerformance(now);
 
             if (_mode.InCallMode && _endpoints?.Mic is { Active: true } mic &&
                 _watchdog.Tick(_audio.GetPeak(mic.Id), now, _cfg.SilentMicWarningSeconds))
@@ -785,6 +809,7 @@ internal sealed class AppController : IDisposable
         sb.AppendLine($"Installed: {Installer.IsInstalled} (running installed copy: {Installer.IsRunningInstalled})  " +
                       $"notifications: {(Notifications.Enabled ? "on" : "off")}  last update check: {_cfg.LastUpdateCheck?.ToString("u") ?? "never"}");
         sb.AppendLine($"BLE running: {_ble.IsRunning}  warning: {_bleWarning ?? "none"}");
+        sb.AppendLine($"Performance: {_perfSummary}");
         sb.AppendLine($"Connected: {_connected}  call mode: {_mode.InCallMode}  in call: {_calls.InCall} ({_calls.CallApp})");
         sb.AppendLine().AppendLine("Config:").AppendLine(JsonSerializer.Serialize(_cfg));
 
@@ -826,6 +851,50 @@ internal sealed class AppController : IDisposable
         var text = sb.ToString();
         Log.Write("Diagnostics:\n" + text);
         try { Clipboard.SetText(text); } catch (Exception ex) { Log.Write($"Clipboard failed: {ex.Message}"); }
+    }
+
+    // ---------------- Calls: mic usage, read on change ----------------
+
+    /// <summary>
+    /// Feeds the call detector. The registry is only read when Windows reported a change (instant
+    /// call detection), every 30 s as a safety net, or every tick if the watcher couldn't start.
+    /// The detector itself still ticks every second for its end-of-call delay.
+    /// </summary>
+    private void CheckCalls()
+    {
+        var now = DateTimeOffset.Now;
+        if (_micDirty || _micWatcher is null || now - _micReadAt > TimeSpan.FromSeconds(30))
+        {
+            _micDirty = false;
+            _micReadAt = now;
+            _micEntries = _micUsage.Read();
+        }
+        _calls.Tick(_micEntries, now);
+    }
+
+    private void UpdatePerformance(DateTimeOffset now)
+    {
+        var elapsed = now - _perfAt;
+        if (elapsed < TimeSpan.FromMinutes(1)) return;
+        _self.Refresh();
+        var cpu = _self.TotalProcessorTime;
+        var counts = _ble.Counts;
+        double secs = elapsed.TotalSeconds;
+        double cpuPct = (cpu - _perfCpu).TotalSeconds / secs / Environment.ProcessorCount * 100;
+        long mine = _myAdverts - _perfMyAdverts;
+        _perfSummary =
+            $"CPU {cpuPct:0.00}% of the machine over the last {secs:0} s; " +
+            $"{_self.WorkingSet64 / (1024 * 1024)} MB memory\n" +
+            $"  Bluetooth filter {(_ble.AppleOnly ? "ON (Apple only)" : "OFF")}: " +
+            $"{(counts.Delivered - _perfCounts.Delivered) / secs:0.0} adverts/s delivered, " +
+            $"{(counts.Apple - _perfCounts.Apple) / secs:0.0}/s Apple, " +
+            $"{(counts.Parsed - _perfCounts.Parsed) / secs:0.0}/s AirPods status\n" +
+            $"  Your AirPods heard {(mine > 0 ? $"every ~{secs * 1000 / mine:0} ms" : "not at all")} in that minute\n" +
+            $"  Mic check: {(_micWatcher is null ? "polling every second" : "on change (+ every 30 s)")}";
+        _perfAt = now;
+        _perfCpu = cpu;
+        _perfCounts = counts;
+        _perfMyAdverts = _myAdverts;
     }
 
     // ---------------- Notifications, install, updates ----------------
@@ -957,6 +1026,7 @@ internal sealed class AppController : IDisposable
         _lidTimer.Stop();
         StopAap();
         _ble.Dispose();
+        _micWatcher?.Dispose();
         _tray.Dispose();
     }
 }

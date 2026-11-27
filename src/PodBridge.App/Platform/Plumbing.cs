@@ -13,7 +13,7 @@ namespace PodBridge.App.Platform;
 /// </summary>
 internal sealed class RegistryMicUsageSource : IMicUsageSource
 {
-    private const string Root = @"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone";
+    public const string Root = @"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone";
 
     public IReadOnlyList<MicUsageEntry> Read()
     {
