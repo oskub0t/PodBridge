@@ -18,11 +18,20 @@ public sealed class EarDetection
     private DateTimeOffset _candidateSince;
     private int? _pausedAtLevel;
     private DateTimeOffset _pausedAt;
+    private DateTimeOffset _unstableUntil = DateTimeOffset.MinValue;
 
     /// <summary>Zero (default): act on the first differing reading. Otherwise the new count must be
     /// seen again after this long.</summary>
     public TimeSpan Settle { get; init; } = TimeSpan.Zero;
     public TimeSpan ResumeWindow { get; init; } = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// Flip-flop guard: right after an action, or while readings keep changing, a new count must
+    /// hold for <see cref="FlapSettle"/> before it counts. One-off changes stay immediate; rapid
+    /// back-and-forth (conflicting adverts) is ignored instead of pausing/resuming each time.
+    /// </summary>
+    public TimeSpan FlapWindow { get; init; } = TimeSpan.FromSeconds(2);
+    public TimeSpan FlapSettle { get; init; } = TimeSpan.FromMilliseconds(700);
 
     public int? InEarCount => _stable;
 
@@ -31,17 +40,22 @@ public sealed class EarDetection
         if (_stable is null) { _stable = inEarCount; return EarAction.None; }
         if (inEarCount == _stable) { _candidate = null; return EarAction.None; }
 
-        if (Settle > TimeSpan.Zero)
+        bool unstable = now < _unstableUntil;
+        var settle = unstable && FlapSettle > Settle ? FlapSettle : Settle;
+        if (settle > TimeSpan.Zero)
         {
             if (_candidate != inEarCount)
             {
                 _candidate = inEarCount;
                 _candidateSince = now;
+                if (unstable) _unstableUntil = now + FlapWindow; // still flip-flopping
                 return EarAction.None;
             }
-            if (now - _candidateSince < Settle) return EarAction.None;
+            if (now - _candidateSince < settle) return EarAction.None;
         }
-        return Commit(inEarCount, now);
+        var action = Commit(inEarCount, now);
+        if (action != EarAction.None) _unstableUntil = now + FlapWindow;
+        return action;
     }
 
     /// <summary>
@@ -77,5 +91,6 @@ public sealed class EarDetection
     public void Reset()
     {
         _stable = _candidate = _pausedAtLevel = null;
+        _unstableUntil = DateTimeOffset.MinValue;
     }
 }

@@ -42,6 +42,7 @@ internal sealed class AppController : IDisposable
     private readonly MicWatchdog _watchdog = new();
     private readonly MediaSessions _media = new();
     private readonly EarDetection _ear = new();
+    private readonly EarStateMerger _earMerger = new();   // both pods' views → one in-ear count
     private readonly LowBatteryMonitor _lowBattery = new();
     private readonly SwitchAdvisor _switch = new();
     private readonly TrayIcon _tray = new();
@@ -66,6 +67,7 @@ internal sealed class AppController : IDisposable
     // Recent changes of the in-ear status byte, for diagnosing the in-ear mapping on new models.
     private readonly Queue<string> _earLog = new();
     private string? _lastEarSignature;
+    private string _lastLidText = "?";
 
     // Optional advanced features (driver installed separately with admin; off by default).
     private AapSession? _aap;
@@ -100,7 +102,11 @@ internal sealed class AppController : IDisposable
         }
         _learnMode = _cfg.MyModelId is null;
 
-        _presence.Appeared += OnCaseOpened;
+        _presence.Appeared += s =>
+        {
+            _earMerger.Reset(); // back after an absence: old in-ear state no longer applies
+            OnCaseOpened(s);
+        };
         _presence.Updated += s =>
         {
             // While the advanced session reports exact (1 %) battery, don't overwrite it with 10 % steps.
@@ -457,15 +463,18 @@ internal sealed class AppController : IDisposable
 
     private void HandleEars(AirPodsStatus s)
     {
-        int count = s.InEarCount; // charging pods count as in the case
+        int count = _earMerger.Observe(s); // a pod in the case only speaks for itself
         // Log when something meaningful changes, not every alternating advert from the two pods.
-        string lid = LidTracker.FromPodInCase(s) ? (LidTracker.IsOpen(s) ? "open" : "closed") : "-";
-        string signature = $"{s.LeftInEar}{s.RightInEar}{s.LeftCharging}{s.RightCharging}{lid}";
+        if (LidTracker.FromPodInCase(s)) _lastLidText = LidTracker.IsOpen(s) ? "open" : "closed";
+        string lid = _lastLidText;
+        // Combined picture only: the two pods' alternating adverts would otherwise fill the log.
+        string signature = $"{count}{s.LeftCharging}{s.RightCharging}{lid}";
         if (signature != _lastEarSignature)
         {
             _lastEarSignature = signature;
             EarLog($"L {(s.LeftInEar ? "in" : "out")}{(s.LeftCharging ? " (charging)" : "")}, " +
-                   $"R {(s.RightInEar ? "in" : "out")}{(s.RightCharging ? " (charging)" : "")} → {count} in ear, " +
+                   $"R {(s.RightInEar ? "in" : "out")}{(s.RightCharging ? " (charging)" : "")} " +
+                   $"[from {((s.RawStatus & 0x20) != 0 ? "left" : "right")} pod] → {count} in ear, " +
                    $"lid {lid}   [status 0x{s.RawStatus:X2}, lid 0x{s.RawLid:X2}]", s.Timestamp);
         }
         ActOnEars(_ear.Observe(count, s.Timestamp), "advertisement");

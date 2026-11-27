@@ -25,7 +25,28 @@ public class EarDetectionTests
         var e = new EarDetection();
         e.Observe(2, At(0));
         Assert.Equal(EarAction.Pause, e.Observe(0, At(0.75)));
-        Assert.Equal(EarAction.Resume, e.Observe(2, At(1.5)));
+        Assert.Equal(EarAction.None, e.Observe(2, At(1.5)));     // right after an action: must hold...
+        Assert.Equal(EarAction.Resume, e.Observe(2, At(2.25)));  // ...and it did
+    }
+
+    [Fact]
+    public void Flip_flopping_readings_do_not_spam_pause_and_resume()
+    {
+        // The 0.3.10 field bug: counts alternating 1/0 about every 0.4 s.
+        var e = new EarDetection();
+        e.Observe(1, At(0));
+        var actions = new List<EarAction>();
+        for (int i = 1; i <= 25; i++) actions.Add(e.Observe(i % 2 == 0 ? 1 : 0, At(i * 0.4)));
+        Assert.Equal(1, actions.Count(a => a != EarAction.None)); // the first pause, nothing after
+    }
+
+    [Fact]
+    public void After_things_calm_down_changes_are_immediate_again()
+    {
+        var e = new EarDetection();
+        e.Observe(2, At(0));
+        Assert.Equal(EarAction.Pause, e.Observe(1, At(1)));
+        Assert.Equal(EarAction.Resume, e.Observe(2, At(10)));    // long after: immediate
     }
 
     [Fact]
