@@ -43,6 +43,7 @@ public static class ProximityPairingParser
     public const ushort AppleCompanyId = 0x004C;
     private const byte ProximityPairingType = 0x07;
     private const int MinPayload = 7;
+    private const byte PlainPrefix = 0x01;
 
     public static AirPodsStatus? TryParse(ReadOnlySpan<byte> appleData, short rssi, DateTimeOffset timestamp)
     {
@@ -53,7 +54,9 @@ public static class ProximityPairingParser
             int len = appleData[i + 1];
             int start = i + 2;
             if (start + len > appleData.Length) return null; // truncated / malformed
-            if (type == ProximityPairingType && len >= MinPayload)
+            // Only the 0x01 variant carries model + battery in the clear. Other variants (e.g. 0x06,
+            // 17 bytes) are encrypted; reading them as model/battery gives random values.
+            if (type == ProximityPairingType && len >= MinPayload && appleData[start] == PlainPrefix)
                 return ParsePayload(appleData.Slice(start, len), rssi, timestamp)
                     with { RawHex = Convert.ToHexString(appleData) };
             i = start + len;

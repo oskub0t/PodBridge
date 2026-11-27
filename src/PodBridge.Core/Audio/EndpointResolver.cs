@@ -39,6 +39,15 @@ public static partial class EndpointResolver
         return SuffixRegex().Replace(inner.Trim(), "").Trim();
     }
 
+    [GeneratedRegex(@"\s*-\s*Find My$", RegexOptions.IgnoreCase)]
+    private static partial Regex FindMySuffixRegex();
+
+    /// <summary>
+    /// Name for display. Recent AirPods firmware gives non-Apple devices a name ending in
+    /// " - Find My"; Apple devices don't show that, so neither do we. Matching still uses the full name.
+    /// </summary>
+    public static string DisplayName(string deviceName) => FindMySuffixRegex().Replace(deviceName, "").Trim();
+
     /// <summary>Distinct device names of AirPods-looking endpoints (for auto-detect / diagnostics).</summary>
     public static IReadOnlyList<string> FindAirPodsDevices(IEnumerable<AudioEndpoint> endpoints) =>
         endpoints

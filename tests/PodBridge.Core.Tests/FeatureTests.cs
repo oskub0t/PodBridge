@@ -188,3 +188,53 @@ public class RawHexTests
         Assert.Equal("0707010E2020550501", s.RawHex);
     }
 }
+
+/// <summary>Real advertisements captured on the user's PC (Windows 11 26200, AirPods Pro 3 nearby).</summary>
+public class CapturedAdvertTests
+{
+    private static byte[] Hex(string h) => Convert.FromHexString(h);
+
+    [Fact]
+    public void Plain_proximity_pairing_from_the_field_decodes()
+    {
+        var s = ProximityPairingParser.TryParse(
+            Hex("071901272023AA8F110004309D09AAC688E512A738A5247D475CE7"), -55, DateTimeOffset.UnixEpoch)!;
+        Assert.Equal(0x2720, s.ModelId);
+        Assert.Equal(100, s.LeftPercent);
+        Assert.Equal(100, s.RightPercent);
+        Assert.Null(s.CasePercent);
+        Assert.True(AirPodsModels.LooksValid(s.ModelId));
+    }
+
+    [Fact]
+    public void Second_pair_nearby_decodes_as_worn_at_80()
+    {
+        var s = ProximityPairingParser.TryParse(
+            Hex("07190136200B888F11000584642F10503CB3F987FE3AF85E876E3F"), -59, DateTimeOffset.UnixEpoch)!;
+        Assert.Equal(0x3620, s.ModelId);
+        Assert.Equal(80, s.LeftPercent);
+        Assert.Equal(80, s.RightPercent);
+        Assert.True(s.LeftInEar && s.RightInEar);
+    }
+
+    [Theory]
+    [InlineData("071106EEE7CD39FF6EE2874D7D3B82F8EF38B9")]
+    [InlineData("071106ED9B459C1F5F4F568C524CFAD9DF50C8")]
+    [InlineData("071106917048FA8041166B0783E4765F2D6F60")]
+    [InlineData("07110636DFDB21CB0A4D55A3849DECE7B540C3")]
+    public void Encrypted_variant_is_ignored(string hex) =>
+        Assert.Null(ProximityPairingParser.TryParse(Hex(hex), -63, DateTimeOffset.UnixEpoch));
+
+    [Theory]
+    [InlineData((ushort)0x26B0, false)] // what v0.2.0 saved from an encrypted advert
+    [InlineData((ushort)0x2720, true)]
+    [InlineData((ushort)0x1420, true)]
+    public void Saved_ids_are_sanity_checked(ushort id, bool valid) =>
+        Assert.Equal(valid, AirPodsModels.LooksValid(id));
+
+    [Theory]
+    [InlineData("Alex’s AirPods Pro - Find My", "Alex’s AirPods Pro")]
+    [InlineData("AirPods Pro", "AirPods Pro")]
+    public void Find_my_suffix_is_hidden(string name, string shown) =>
+        Assert.Equal(shown, PodBridge.Core.Audio.EndpointResolver.DisplayName(name));
+}

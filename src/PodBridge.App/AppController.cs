@@ -68,6 +68,13 @@ internal sealed class AppController : IDisposable
         _presence = new PresenceTracker(() => _cfg);
         _calls = new CallDetector(() => _cfg);
         _mode = new AudioModeController(_audio, () => _cfg, Log.Write);
+        if (_cfg.MyModelId is ushort saved && !AirPodsModels.LooksValid(saved))
+        {
+            // v0.2.0 could save an ID read from an encrypted advert; it never matches again.
+            Log.Write($"Discarding invalid saved model ID 0x{saved:X4}; setup will run again");
+            _cfg.MyModelId = null;
+            ConfigStore.Save(_cfg);
+        }
         _learnMode = _cfg.MyModelId is null;
 
         _presence.Appeared += OnCaseOpened;
@@ -99,7 +106,9 @@ internal sealed class AppController : IDisposable
     /// Apple devices. Falls back to the model name only if it's one we actually recognise.
     /// </summary>
     private string DeviceTitle =>
-        _endpoints?.DeviceName ?? _cfg.DeviceName ?? ModelName(_cfg.MyModelId) ?? "AirPods";
+        (_endpoints?.DeviceName ?? _cfg.DeviceName) is string name
+            ? EndpointResolver.DisplayName(name)
+            : ModelName(_cfg.MyModelId) ?? "AirPods";
 
     private string? ModelName(ushort? id) =>
         id is ushort m && (AirPodsModels.IsKnown(m) || _cfg.ParsedModelNames().ContainsKey(m))
@@ -135,6 +144,10 @@ internal sealed class AppController : IDisposable
     {
         // Once set up, other people's AirPods are simply ignored.
         if (!_learnMode || s.Rssi < LearnRssi || _rejected.Contains(s.ModelId)) return;
+        if (!AirPodsModels.LooksValid(s.ModelId)) return;
+        // Setup asks you to open the case next to the PC, and only an open case reports its own
+        // battery. That tells your AirPods apart from a colleague's pair that's just being worn nearby.
+        if (s.CasePercent is null) return;
         // Only offer IDs that repeat; a value that changes every advert can't identify anything.
         if (!_sightings.Observe(s)) return;
         if (_learnPrompted.TryGetValue(s.ModelId, out var t) && s.Timestamp - t < TimeSpan.FromMinutes(10)) return;
@@ -166,7 +179,7 @@ internal sealed class AppController : IDisposable
         _rejected.Clear();
         _learnPrompted.Clear();
         _sightings.Clear();
-        Hud.Show("Open your AirPods case", "Hold it close to this PC.", seconds: 4);
+        Hud.Show("Open your AirPods case", "Keep the AirPods inside and hold it next to this PC.", seconds: 5);
     }
 
     private void OnCaseOpened(AirPodsStatus s)

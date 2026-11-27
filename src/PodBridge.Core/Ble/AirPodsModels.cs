@@ -30,4 +30,10 @@ public static class AirPodsModels
     }
 
     public static bool IsKnown(ushort modelId) => Known.ContainsKey(modelId);
+
+    /// <summary>
+    /// Every genuine Apple audio model ID seen so far ends in 0x20 (0x0E20, 0x1420, 0x2720...).
+    /// Used to reject IDs saved from misread (encrypted) adverts by earlier versions.
+    /// </summary>
+    public static bool LooksValid(ushort modelId) => (modelId & 0xFF) == 0x20;
 }
