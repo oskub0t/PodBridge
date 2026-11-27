@@ -9,9 +9,8 @@
 ; (0x2720 -> PID 2027). The other models' IDs follow that rule but are UNCONFIRMED; check yours with
 ; driver\check-aap-service.ps1 (or the paste-in command in driver\README.md).
 ;
-; Note: on that PC the AAP Server node already had a driver (Status OK). Which one is still to be
-; checked; an inbox, Microsoft-signed match may outrank this test-signed driver, in which case pick
-; it manually: Device Manager > AAP Server > Update driver > Browse > Let me pick > Have Disk.
+; The AAP Server node has NO driver by default (status OK, but no service, INF or provider: it
+; runs driverless), so nothing competes with this driver and pnputil /install binds it directly.
 ;
 
 [Version]

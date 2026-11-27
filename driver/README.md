@@ -27,6 +27,7 @@ Look for an entry with `AapService : True`.
 - **"the AAP service node exists"**: good. It's named **"AAP Server"**. If your model's hardware
   id isn't in `podbridgeaap.inf` yet, add it.
   *Confirmed so far:* AirPods Pro 3 → `BTHENUM\{74ec2172-0bad-4d01-8f77-997b2be0722a}_VID&0001004c_PID&2027`.
+  By default the node runs **without any driver**, so installing this one replaces nothing.
 - **"no AAP service node"**: Windows doesn't create a device node for that service, so this
   driver can't attach as written. Report it; the fallback is a different attach strategy (e.g. an
   upper filter on the AirPods' main Bluetooth device node).
@@ -72,7 +73,8 @@ bcdedit /set testsigning off
 ## First-run checklist
 
 - [ ] Compiles without warnings (warnings are errors)
-- [ ] Check script finds the AAP node; INF hardware ID updated
+- [x] Check script finds the AAP node; INF hardware ID updated (AirPods Pro 3, Windows 11 26200)
+- [x] Node has no existing driver to compete with
 - [ ] Driver loads on the AAP node (Device Manager shows "PodBridge AirPods control channel")
 - [ ] PodBridge opens it as a normal user; debug output shows "AAP channel open"
 - [ ] Battery and ear packets arrive (Diagnostics shows exact battery)
