@@ -72,7 +72,20 @@
                     <TextBlock Style="{StaticResource RowNote}"
                                Text="When you're wearing your AirPods with another device and this PC starts playing or a call starts."/>
                     <Rectangle Style="{StaticResource Divider}"/>
-                    <CheckBox x:Name="AutoConnectSw" Style="{StaticResource Switch}" Content="Connect when case opens"/>
+                    <Grid Margin="10,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Style="{StaticResource RowLabel}" Text="Connect automatically"/>
+                        <ComboBox x:Name="AutoConnectCombo" Grid.Column="1" MinWidth="190">
+                            <ComboBoxItem Content="When you put them in"/>
+                            <ComboBoxItem Content="When the case opens"/>
+                            <ComboBoxItem Content="Never"/>
+                        </ComboBox>
+                    </Grid>
+                    <TextBlock Style="{StaticResource RowNote}"
+                               Text="Sound only moves to your AirPods once one is in your ear, even if they connect earlier."/>
                     <Rectangle Style="{StaticResource Divider}"/>
                     <CheckBox x:Name="PopupSw" Style="{StaticResource Switch}" Content="Show battery when case opens"/>
                 </StackPanel>

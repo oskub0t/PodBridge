@@ -56,7 +56,12 @@ public partial class SettingsWindow : Window
         BtSettingsBtn.Click += (_, _) => BluetoothSettingsClicked?.Invoke();
 
         SwitchCombo.SelectionChanged += (_, _) => Change(() => _cfg.ConnectToThisPc = PolicyOrder[Math.Max(0, SwitchCombo.SelectedIndex)]);
-        Bind(AutoConnectSw, v => _cfg.AutoConnect = v);
+        AutoConnectCombo.SelectionChanged += (_, _) => Change(() =>
+        {
+            _cfg.AutoConnect = AutoConnectCombo.SelectedIndex != 2;
+            if (AutoConnectCombo.SelectedIndex == 1) _cfg.ConnectWhen = ConnectTrigger.CaseOpens;
+            else if (AutoConnectCombo.SelectedIndex == 0) _cfg.ConnectWhen = ConnectTrigger.PutInEar;
+        });
         Bind(PopupSw, v => _cfg.ShowPopup = v);
         Bind(EarSw, v => _cfg.EarDetection = v);
         Bind(CallSw, v => _cfg.AutoCallMode = v);
@@ -79,7 +84,7 @@ public partial class SettingsWindow : Window
     {
         _loading = true;
         SwitchCombo.SelectedIndex = Array.IndexOf(PolicyOrder, _cfg.ConnectToThisPc);
-        AutoConnectSw.IsChecked = _cfg.AutoConnect;
+        AutoConnectCombo.SelectedIndex = !_cfg.AutoConnect ? 2 : _cfg.ConnectWhen == ConnectTrigger.CaseOpens ? 1 : 0;
         PopupSw.IsChecked = _cfg.ShowPopup;
         EarSw.IsChecked = _cfg.EarDetection;
         CallSw.IsChecked = _cfg.AutoCallMode;

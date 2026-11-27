@@ -19,6 +19,9 @@ public sealed record AirPodsStatus(
     /// <summary>The raw status byte (in-ear and orientation bits), for diagnosing in-ear mapping.</summary>
     public byte RawStatus { get; init; }
 
+    /// <summary>The raw lid byte (described as a lid open counter), for finding a "lid closed" signal.</summary>
+    public byte RawLid { get; init; }
+
     /// <summary>Lowest known pod battery, used for the tray icon.</summary>
     public int? LowestPodPercent =>
         (LeftPercent, RightPercent) switch
@@ -95,7 +98,7 @@ public static class ProximityPairingParser
             LeftInEar: (ear & (flip ? 0x08 : 0x02)) != 0,
             RightInEar: (ear & (flip ? 0x02 : 0x08)) != 0,
             Rssi: rssi,
-            Timestamp: ts) { RawStatus = status };
+            Timestamp: ts) { RawStatus = status, RawLid = p[6] };
     }
 
     private static int? Battery(int nibble) => nibble switch

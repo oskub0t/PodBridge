@@ -48,8 +48,13 @@ internal sealed class AppController : IDisposable
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
 
     // Case-open cards close when the lid closes, like on iOS: the AirPods stop advertising then.
-    private static readonly TimeSpan LidClosedAfter = TimeSpan.FromSeconds(2.5);
-    private readonly DispatcherTimer _lidTimer = new() { Interval = TimeSpan.FromMilliseconds(300) };
+    private readonly AdvertCadence _lidCadence = new();
+    private readonly DispatcherTimer _lidTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
+
+    // Connect when a bud goes in (default) or when the case opens; sound follows your ears.
+    private readonly AutoConnectPolicy _autoConnect = new();
+    private bool _waitingForEars;              // connected while in the case: audio not switched yet
+    private string? _outputBeforeAirPods;      // what to keep playing on until a bud is in
     private ushort? _cardCaseModel;
 
     private readonly Dictionary<ushort, AirPodsStatus> _seen = [];
@@ -59,7 +64,7 @@ internal sealed class AppController : IDisposable
 
     // Recent changes of the in-ear status byte, for diagnosing the in-ear mapping on new models.
     private readonly Queue<string> _earLog = new();
-    private byte? _lastRawStatus;
+    private byte? _lastRawStatus, _lastRawLid;
 
     // Optional advanced features (driver installed separately with admin; off by default).
     private AapSession? _aap;
@@ -150,6 +155,7 @@ internal sealed class AppController : IDisposable
 
     private void OnAdvertisement(AirPodsStatus s)
     {
+        if (s.ModelId == _cardCaseModel) _lidCadence.Observe(s.Timestamp);
         if (s.Rssi >= -85)
         {
             _seen[s.ModelId] = s;
@@ -219,12 +225,13 @@ internal sealed class AppController : IDisposable
             return;
         }
 
-        bool auto = _cfg.AutoConnect && DateTimeOffset.Now - _manualDisconnectAt > ManualDisconnectGrace;
+        bool auto = _autoConnect.OnCaseOpened(_cfg, _connected, RecentlyDisconnected, DateTimeOffset.Now);
         if (auto) Connect();
-        if (_cfg.ShowPopup || !auto)
+        bool waitsForEar = _cfg.AutoConnect && _cfg.ConnectWhen == ConnectTrigger.PutInEar;
+        if (_cfg.ShowPopup || !_cfg.AutoConnect)
         {
             var card = ShowCard(DeviceTitle, MyBattery(), _connectRequestedAt is null ? CardState.Connect : CardState.Connecting,
-                caseModel: s.ModelId);
+                waitsForEar ? "Put an AirPod in to connect." : null, caseModel: s.ModelId);
             card.PrimaryClicked += () =>
             {
                 switch (card.State)
@@ -247,6 +254,8 @@ internal sealed class AppController : IDisposable
         ushort? caseModel = null)
     {
         _cardCaseModel = caseModel;
+        _lidCadence.Reset();
+        if (caseModel is ushort m && _seen.TryGetValue(m, out var first)) _lidCadence.Observe(first.Timestamp);
         if (caseModel is not null) _lidTimer.Start();
         _card?.Close();
         var card = new ConnectCard();
@@ -258,10 +267,9 @@ internal sealed class AppController : IDisposable
 
     private void CheckLid()
     {
-        if (_card is not { IsVisible: true } card || _cardCaseModel is not ushort model) { _lidTimer.Stop(); return; }
-        if (!_seen.TryGetValue(model, out var last)) return;
-        if (DateTimeOffset.Now - last.Timestamp <= LidClosedAfter) return;
-        Log.Write("Case closed: dismissing card");
+        if (_card is not { IsVisible: true } card || _cardCaseModel is null) { _lidTimer.Stop(); return; }
+        if (!_lidCadence.LooksGone(DateTimeOffset.Now)) return;
+        Log.Write($"Case closed: dismissing card (no adverts for {_lidCadence.Threshold.TotalMilliseconds:0} ms)");
         _lidTimer.Stop();
         _cardCaseModel = null;
         card.Dismiss();
@@ -308,18 +316,69 @@ internal sealed class AppController : IDisposable
             Log.Write("AirPods connected");
             _connectRequestedAt = null;
             bool call = _manualCallMode || (_cfg.AutoCallMode && _calls.InCall);
-            if (call) _mode.ApplyCallMode(); else _mode.ApplyMusicMode();
-            if (_card is { IsVisible: true }) _card.SetState(CardState.Connected);
-            else Hud.Show($"{DeviceTitle} connected", call ? "Call mode" : null);
+            bool inCase = _cfg.EarDetection && !call && _ear.InEarCount == 0 && !_presence.IsStale(DateTimeOffset.Now);
+            if (inCase)
+            {
+                // Like Apple: connected early is fine, but sound only moves once a bud is in.
+                _waitingForEars = true;
+                KeepOutputOffAirPods();
+                Log.Write("Connected while in the case: keeping sound on this PC until a bud is in");
+            }
+            else if (call) _mode.ApplyCallMode();
+            else _mode.ApplyMusicMode();
+
+            if (_card is { IsVisible: true })
+                _card.SetState(CardState.Connected, inCase ? "Connected. Put them in to listen." : null);
+            else if (!inCase) Hud.Show($"{DeviceTitle} connected", call ? "Call mode" : null);
         }
         else
         {
             Log.Write("AirPods disconnected");
             _micWarning = null;
+            _waitingForEars = false;
             _ear.Reset();
             _media.ForgetPaused();
             StopAap();
             _windowsBattery = null;
+        }
+    }
+
+    private bool RecentlyDisconnected => DateTimeOffset.Now - _manualDisconnectAt < ManualDisconnectGrace;
+
+    private bool IsAirPodsEndpoint(string? id) =>
+        id is not null && _endpoints is { } r &&
+        (r.MusicOutput?.Id == id || r.CallOutput?.Id == id || r.Mic?.Id == id);
+
+    /// <summary>Remembers the PC's own output while the AirPods aren't connected.</summary>
+    private void RememberPcOutput()
+    {
+        var id = _audio.GetDefaultId(Flow.Render, Role.Console);
+        if (id is not null && !IsAirPodsEndpoint(id)) _outputBeforeAirPods = id;
+    }
+
+    /// <summary>If Windows switched the output to the AirPods on connect, put it back for now.</summary>
+    private void KeepOutputOffAirPods()
+    {
+        if (_outputBeforeAirPods is null) return;
+        foreach (var role in new[] { Role.Console, Role.Multimedia })
+            if (IsAirPodsEndpoint(_audio.GetDefaultId(Flow.Render, role)))
+                _audio.SetDefault(_outputBeforeAirPods, role);
+    }
+
+    /// <summary>A bud went in: connect if that's the trigger, and move the sound if we were waiting.</summary>
+    private void OnEarsChanged(int inEar)
+    {
+        var now = DateTimeOffset.Now;
+        if (_autoConnect.OnInEarCount(_cfg, inEar, _connected, RecentlyDisconnected, now))
+        {
+            Log.Write($"Auto-connect: {inEar} in ear");
+            Connect();
+        }
+        if (_waitingForEars && _connected && inEar > 0)
+        {
+            _waitingForEars = false;
+            Log.Write("A bud is in: moving sound to the AirPods");
+            if (_manualCallMode || (_cfg.AutoCallMode && _calls.InCall)) _mode.ApplyCallMode(); else _mode.ApplyMusicMode();
         }
     }
 
@@ -368,10 +427,11 @@ internal sealed class AppController : IDisposable
     private void HandleEars(AirPodsStatus s)
     {
         int count = (s.LeftInEar ? 1 : 0) + (s.RightInEar ? 1 : 0);
-        if (s.RawStatus != _lastRawStatus)
+        if (s.RawStatus != _lastRawStatus || s.RawLid != _lastRawLid)
         {
             _lastRawStatus = s.RawStatus;
-            var entry = $"{s.Timestamp.LocalDateTime:HH:mm:ss}  status 0x{s.RawStatus:X2} " +
+            _lastRawLid = s.RawLid;
+            var entry = $"{s.Timestamp.LocalDateTime:HH:mm:ss}  lid 0x{s.RawLid:X2}  status 0x{s.RawStatus:X2} " +
                         $"(bits {Convert.ToString(s.RawStatus, 2).PadLeft(8, '0')})  read as L={(s.LeftInEar ? "in" : "out")} " +
                         $"R={(s.RightInEar ? "in" : "out")} → {count} in ear";
             _earLog.Enqueue(entry);
@@ -379,6 +439,7 @@ internal sealed class AppController : IDisposable
             Log.Write("Ear status: " + entry);
         }
         ActOnEars(_ear.Observe(count, s.Timestamp), "advertisement");
+        if (_ear.InEarCount is int stable) OnEarsChanged(stable);
     }
 
     private void ActOnEars(EarAction action, string source)
@@ -500,6 +561,7 @@ internal sealed class AppController : IDisposable
         var now = DateTimeOffset.Now;
         try
         {
+            if (!_connected) RememberPcOutput();
             UpdateConnection();
             UpdateAdvanced(now);
             _calls.Tick(_micUsage.Read(), now);
@@ -658,7 +720,8 @@ internal sealed class AppController : IDisposable
 
         sb.AppendLine().AppendLine($"Advanced features: enabled={_cfg.AdvancedFeatures} driver installed={_driverInstalled} " +
                                    $"session={(_aap is null ? "none" : $"open, mode={_aap.NoiseMode}, CA={_aap.ConversationAwareness}")}");
-        sb.AppendLine().AppendLine("In-ear status changes (newest last):");
+        sb.AppendLine().AppendLine($"Lid: adverts every ~{_lidCadence.Threshold.TotalMilliseconds / 4:0} ms (closes card after {_lidCadence.Threshold.TotalMilliseconds:0} ms of silence)");
+        sb.AppendLine().AppendLine("In-ear / lid byte changes (newest last):");
         foreach (var line in _earLog) sb.AppendLine("  " + line);
 
         sb.AppendLine().AppendLine($"Windows-reported battery: {_windowsBattery?.ToString() ?? "none"}");

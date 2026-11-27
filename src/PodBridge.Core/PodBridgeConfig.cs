@@ -21,7 +21,12 @@ public sealed class PodBridgeConfig
     /// <summary>Seconds without adverts before the next one counts as "case opened" again.</summary>
     public int AbsenceSeconds { get; set; } = 30;
 
+    /// <summary>Connect automatically at all ("Never" in Settings turns this off).</summary>
     public bool AutoConnect { get; set; } = true;
+
+    /// <summary>When automatic connecting happens: when a bud goes in (default) or when the case opens.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter<ConnectTrigger>))]
+    public ConnectTrigger ConnectWhen { get; set; } = ConnectTrigger.PutInEar;
     public bool ShowPopup { get; set; } = true;
     public bool AutoCallMode { get; set; } = true;
 

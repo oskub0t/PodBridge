@@ -66,7 +66,7 @@ public partial class ConnectCard : Window
                 autoCloseSeconds = 20;
                 break;
             case CardState.Connect:
-                SubtitleText.Text = "Not connected";
+                SubtitleText.Text = detail ?? "Not connected";
                 PrimaryBtn.Content = "Connect";
                 break;
             case CardState.Connecting:
