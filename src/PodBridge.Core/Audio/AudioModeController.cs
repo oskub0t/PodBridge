@@ -45,8 +45,19 @@ public sealed class AudioModeController
         Set(Active(r.CallOutputOrMusic), Role.Communications);
         Set(Active(r.Mic), Role.Communications);
 
-        if (_inCallMode && _savedConsoleCapture is not null && _savedConsoleCapture != r.Mic?.Id)
+        // The everyday default mic must not be the AirPods: any app that opens it (voice typing,
+        // a browser tab, a meeting app idling) drops the AirPods to mono hands-free audio.
+        if (_config().LaptopMicOutsideCalls && r.Mic is { } airMic)
+        {
+            var fallback = PickNonAirPodsMic(airMic.Id);
+            foreach (var role in new[] { Role.Console, Role.Multimedia })
+                if (fallback is not null && _backend.GetDefaultId(Flow.Capture, role) == airMic.Id)
+                    _backend.SetDefault(fallback.Id, role);
+        }
+        else if (_inCallMode && _savedConsoleCapture is not null && _savedConsoleCapture != r.Mic?.Id)
+        {
             _backend.SetDefault(_savedConsoleCapture, Role.Console);
+        }
 
         _inCallMode = false;
         _savedConsoleRender = _savedMultimediaRender = _savedConsoleCapture = null;
@@ -76,6 +87,18 @@ public sealed class AudioModeController
         _inCallMode = true;
         _log($"Call mode → out: {output?.Name ?? "?"}, mic: {mic?.Name ?? "none found"}");
         return true;
+    }
+
+    /// <summary>The mic that was default before the call, else the first other active mic
+    /// (prefers built-in "Microphone" entries over e.g. a dock or display).</summary>
+    private AudioEndpoint? PickNonAirPodsMic(string airPodsMicId)
+    {
+        var mics = _backend.GetEndpoints()
+            .Where(e => e.Flow == Flow.Capture && e.Active && e.Id != airPodsMicId)
+            .ToList();
+        return mics.FirstOrDefault(e => e.Id == _savedConsoleCapture)
+               ?? mics.FirstOrDefault(e => e.Name.Contains("Microphone", StringComparison.OrdinalIgnoreCase))
+               ?? mics.FirstOrDefault();
     }
 
     private static AudioEndpoint? Active(AudioEndpoint? e) => e is { Active: true } ? e : null;

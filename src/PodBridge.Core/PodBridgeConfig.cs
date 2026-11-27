@@ -34,6 +34,12 @@ public sealed class PodBridgeConfig
 
     public bool LowBatteryAlerts { get; set; } = true;
 
+    /// <summary>
+    /// Outside calls, keep the PC's own mic as the default recording device so apps that open the
+    /// default mic don't drop the AirPods to mono. Calls still switch to the AirPods mic.
+    /// </summary>
+    public bool LaptopMicOutsideCalls { get; set; } = true;
+
     /// <summary>Windows 11 Acrylic/Mica behind cards. Turn off if your PC renders them oddly.</summary>
     public bool UseSystemMaterials { get; set; } = true;
 

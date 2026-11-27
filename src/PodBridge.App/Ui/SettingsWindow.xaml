@@ -97,6 +97,10 @@
                                Text="Switches to the AirPods mic when Teams, Zoom, Slack or Webex starts using a microphone, and back to high-quality audio afterwards."/>
                     <Rectangle Style="{StaticResource Divider}"/>
                     <CheckBox x:Name="SilentMicSw" Style="{StaticResource Switch}" Content="Warn when the AirPods mic gets no audio"/>
+                    <Rectangle Style="{StaticResource Divider}"/>
+                    <CheckBox x:Name="LaptopMicSw" Style="{StaticResource Switch}" Content="Use this PC's mic outside calls"/>
+                    <TextBlock Style="{StaticResource RowNote}"
+                               Text="Keeps other apps from switching your AirPods to lower-quality headset audio when they open the default microphone."/>
                 </StackPanel>
             </Border>
 

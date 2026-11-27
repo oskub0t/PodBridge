@@ -132,3 +132,54 @@ public class AudioModeControllerTests
         Assert.Equal("spk", b.Defaults[(Flow.Render, Role.Console)]);
     }
 }
+
+public class DefaultMicTests
+{
+    private static FakeBackend AirPodsMicIsDefault()
+    {
+        var b = new FakeBackend();
+        b.Endpoints.AddRange([
+            new("spk", "Speakers (Realtek(R) Audio)", Flow.Render, true),
+            new("air", "Headphones (Alex’s AirPods Pro - Find My)", Flow.Render, true),
+            new("airmic", "Headset (Alex’s AirPods Pro - Find My)", Flow.Capture, true),
+            new("dock", "Microphone (USB-C Dock Audio)", Flow.Capture, false),
+            new("array", "Microphone Array (Intel® Smart Sound Technology)", Flow.Capture, true),
+        ]);
+        foreach (var role in Enum.GetValues<Role>())
+        {
+            b.Defaults[(Flow.Render, role)] = "air";
+            b.Defaults[(Flow.Capture, role)] = "airmic"; // what Windows did on the user's PC
+        }
+        return b;
+    }
+
+    [Fact]
+    public void Music_mode_moves_everyday_mic_back_to_the_pc()
+    {
+        var b = AirPodsMicIsDefault();
+        new AudioModeController(b, () => new PodBridgeConfig(), _ => { }).ApplyMusicMode();
+        Assert.Equal("array", b.Defaults[(Flow.Capture, Role.Console)]);
+        Assert.Equal("array", b.Defaults[(Flow.Capture, Role.Multimedia)]);
+        Assert.Equal("airmic", b.Defaults[(Flow.Capture, Role.Communications)]);
+    }
+
+    [Fact]
+    public void Call_then_music_round_trip()
+    {
+        var b = AirPodsMicIsDefault();
+        var c = new AudioModeController(b, () => new PodBridgeConfig(), _ => { });
+        c.ApplyMusicMode();
+        c.ApplyCallMode();
+        Assert.Equal("airmic", b.Defaults[(Flow.Capture, Role.Console)]);
+        c.ApplyMusicMode();
+        Assert.Equal("array", b.Defaults[(Flow.Capture, Role.Console)]);
+    }
+
+    [Fact]
+    public void Can_be_turned_off()
+    {
+        var b = AirPodsMicIsDefault();
+        new AudioModeController(b, () => new PodBridgeConfig { LaptopMicOutsideCalls = false }, _ => { }).ApplyMusicMode();
+        Assert.Equal("airmic", b.Defaults[(Flow.Capture, Role.Console)]);
+    }
+}

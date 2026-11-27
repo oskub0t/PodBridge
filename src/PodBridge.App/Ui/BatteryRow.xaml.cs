@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Shapes;
 using PodBridge.Core.Ble;
@@ -20,13 +21,18 @@ public partial class BatteryRow : UserControl
         OverallRing.Percent = overall;
         OverallPct.Text = overall is int o ? $"{o}%" : "";
 
-        Set(LeftRing, LeftPct, LeftBolt, s?.LeftPercent, s?.LeftCharging == true);
-        Set(RightRing, RightPct, RightBolt, s?.RightPercent, s?.RightCharging == true);
-        Set(CaseRing, CasePct, CaseBolt, s?.CasePercent, s?.CaseCharging == true);
+        Set(LeftRing, LeftPct, LeftBolt, s?.LeftPercent, s?.LeftCharging == true, "Left AirPod");
+        Set(RightRing, RightPct, RightBolt, s?.RightPercent, s?.RightCharging == true, "Right AirPod");
+        Set(CaseRing, CasePct, CaseBolt, s?.CasePercent, s?.CaseCharging == true, "Case");
+        AutomationProperties.SetName(OverallRing, overall is int o2 ? $"AirPods battery {o2} percent" : "AirPods battery unknown");
     }
 
-    private static void Set(BatteryRing ring, TextBlock pct, Path bolt, int? value, bool charging)
+    private static void Set(BatteryRing ring, TextBlock pct, Path bolt, int? value, bool charging, string label)
     {
+        // Screen readers announce e.g. "Left AirPod, 80 percent, charging".
+        AutomationProperties.SetName(ring, value is int p
+            ? $"{label}, {p} percent{(charging ? ", charging" : "")}"
+            : $"{label}, battery unknown");
         ring.Percent = value;
         ring.Charging = charging;
         pct.Text = value is int v ? $"{v}%" : "–";

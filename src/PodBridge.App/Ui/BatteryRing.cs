@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Automation.Peers;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 
@@ -47,6 +48,16 @@ public sealed class BatteryRing : FrameworkElement
         SetResourceReference(GoodBrushProperty, "GoodBrush");
         SetResourceReference(WarnBrushProperty, "WarnBrush");
         SetResourceReference(LowBrushProperty, "LowBrush");
+    }
+
+    /// <summary>Exposes the ring to screen readers as an image with a spoken name.</summary>
+    protected override AutomationPeer OnCreateAutomationPeer() => new RingPeer(this);
+
+    private sealed class RingPeer(BatteryRing owner) : FrameworkElementAutomationPeer(owner)
+    {
+        protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Image;
+        protected override string GetClassNameCore() => nameof(BatteryRing);
+        protected override bool IsContentElementCore() => true;
     }
 
     public int? Percent { get => (int?)GetValue(PercentProperty); set => SetValue(PercentProperty, value); }

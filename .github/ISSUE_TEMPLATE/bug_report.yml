@@ -1,0 +1,25 @@
+name: Bug report
+description: Something doesn't work as expected
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. **Before pasting diagnostics:** *Copy Diagnostics* includes your
+        Bluetooth device names (often your first name), your audio devices and raw Bluetooth bytes
+        from devices nearby. Replace anything private, e.g. "Sam's AirPods Pro" → "My AirPods Pro".
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: input
+    id: airpods
+    attributes:
+      label: AirPods model
+      placeholder: e.g. AirPods Pro 3
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics (Settings → Copy Diagnostics), with private details removed
+      render: text

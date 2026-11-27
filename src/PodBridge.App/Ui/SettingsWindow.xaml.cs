@@ -54,6 +54,7 @@ public partial class SettingsWindow : Window
         Bind(CallSw, v => _cfg.AutoCallMode = v);
         Bind(SilentMicSw, v => _cfg.SilentMicWarningSeconds = v ? 20 : 0);
         Bind(LowBatterySw, v => _cfg.LowBatteryAlerts = v);
+        Bind(LaptopMicSw, v => _cfg.LaptopMicOutsideCalls = v);
         Bind(MaterialsSw, v => { _cfg.UseSystemMaterials = v; CardChrome.UseMaterials = v; });
         LoginSw.Checked += (_, _) => { if (!_loading) Autostart.Set(true); };
         LoginSw.Unchecked += (_, _) => { if (!_loading) Autostart.Set(false); };
@@ -69,6 +70,7 @@ public partial class SettingsWindow : Window
         CallSw.IsChecked = _cfg.AutoCallMode;
         SilentMicSw.IsChecked = _cfg.SilentMicWarningSeconds > 0;
         LowBatterySw.IsChecked = _cfg.LowBatteryAlerts;
+        LaptopMicSw.IsChecked = _cfg.LaptopMicOutsideCalls;
         LoginSw.IsChecked = Autostart.IsEnabled;
         MaterialsSw.IsChecked = _cfg.UseSystemMaterials;
         MaterialsSw.IsEnabled = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22621);
