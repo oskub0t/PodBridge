@@ -70,6 +70,19 @@ public class LidTrackerTests
     }
 
     [Fact]
+    public void Pod_out_of_the_case_does_not_flicker_the_lid()
+    {
+        // 16.16.54 in the field: one pod taken out (lid 0x13) while the other, still in the closed
+        // case, reports 0x3B. Interleaved, they must not read as open/closed/open/closed.
+        var t = new LidTracker();
+        AirPodsStatus L(int lid) => new(0x2720, 80, 80, 60, true, false, false, false, false, -46,
+            DateTimeOffset.UnixEpoch) { RawLid = (byte)lid };
+        var events = new[] { 0x33, 0x13, 0x3B, 0x13, 0x3B, 0x13, 0x31 }.Select(x => t.Observe(L(x))).ToList();
+        Assert.Equal(new[] { LidEvent.None, LidEvent.None, LidEvent.Closed, LidEvent.None,
+                             LidEvent.None, LidEvent.None, LidEvent.Opened }, events);
+    }
+
+    [Fact]
     public void Reset_makes_the_next_reading_a_fresh_start()
     {
         var t = new LidTracker();

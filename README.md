@@ -15,7 +15,7 @@ one self-contained file, no installer, no .NET needed, Windows 10 (2004+) or 11,
 | Close the case | Keeps showing the last known levels, dimmed and with their age ("Case · 2 h ago") | Remembered per part in `%LOCALAPPDATA%\PodBridge\battery.json`, like the iOS Batteries widget |
 | Put an AirPod in | Connects (or when the case opens, if you prefer) | Same driver call as *Settings → Bluetooth → Connect* (`KSPROPSETID_BtAudio` one-shot reconnect via Core Audio) |
 | | Moves sound to the AirPods only once one is in your ear, even if they connected while still in the case | In-ear flags in the advertisement |
-| Close the lid | The card disappears straight away; it reappears every time you open the lid | The advertisement's lid byte (bit 0x08 = closed; low bits count openings), with "adverts stopped" as a fallback |
+| Close the lid | The card disappears straight away; it reappears every time you open the lid | The advertisement's lid byte (0x08 = closed, 0x20 = sent by a pod in the case, low bits count openings), with "adverts stopped" as a fallback |
 | | Sets the stereo output as default, keeps the PC's own mic as the everyday mic | Core Audio `IPolicyConfig` (what every audio switcher uses) |
 | Join a Teams call | Switches every default to the AirPods mic and hands-free output | Windows' own "which app is using the mic" record in HKCU |
 | | Warns if the AirPods mic gets no audio for 20 s | Peak meter on the AirPods capture endpoint |
@@ -149,7 +149,9 @@ Early but working: it connects, switches audio and reads advertisements on Windo
 confirm with real hardware:
 
 - [x] Left/right/case battery on AirPods Pro 3 (`0x2720`)
-- [ ] In-ear flags on AirPods Pro 3: pausing works when both come out, not yet for one
+- [x] In-ear flags on AirPods Pro 3 (each bud read correctly; captured in tests)
+- [x] Lid open/closed from the lid byte on AirPods Pro 3
+- [ ] Auto-pause when one bud comes out (reading is right; confirming the pause itself)
 - [ ] Ear-detection latency (how often AirPods advertise while in ears)
 - [ ] "Move to This PC" while the AirPods are connected to an iPhone
 - [ ] Silent-mic warning (exact-zero peak means nobody is recording from the AirPods mic)

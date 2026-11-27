@@ -258,3 +258,30 @@ public class InCaseFieldCaptureTests
         Assert.True(s.LeftCharging && s.RightCharging);
     }
 }
+
+public class WornFieldCaptureTests
+{
+    // AirPods Pro 3, worn, from the user's test: both in → right out → both in → left out.
+    private static AirPodsStatus WithStatus(byte status)
+    {
+        var bytes = Convert.FromHexString("071901272003888F130004B54EDA504A6ECDE3EB0C9C8DD037E473");
+        bytes[5] = status;
+        return ProximityPairingParser.TryParse(bytes, -53, DateTimeOffset.UnixEpoch)!;
+    }
+
+    [Theory]
+    [InlineData(0x0B, true, true)]
+    [InlineData(0x2B, true, true)]
+    [InlineData(0x09, true, false)]   // right taken out
+    [InlineData(0x23, true, false)]   // same, other pod's perspective
+    [InlineData(0x29, false, true)]   // left taken out
+    [InlineData(0x03, false, true)]   // same, other pod's perspective
+    public void In_ear_bits_map_to_the_right_bud(byte status, bool left, bool right)
+    {
+        var s = WithStatus(status);
+        Assert.Equal(left, s.LeftInEar);
+        Assert.Equal(right, s.RightInEar);
+        Assert.False(s.LeftCharging || s.RightCharging);
+        Assert.Equal((left ? 1 : 0) + (right ? 1 : 0), s.InEarCount);
+    }
+}

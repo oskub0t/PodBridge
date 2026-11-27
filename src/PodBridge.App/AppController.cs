@@ -65,7 +65,7 @@ internal sealed class AppController : IDisposable
 
     // Recent changes of the in-ear status byte, for diagnosing the in-ear mapping on new models.
     private readonly Queue<string> _earLog = new();
-    private byte? _lastRawStatus, _lastRawLid;
+    private string? _lastEarSignature;
 
     // Optional advanced features (driver installed separately with admin; off by default).
     private AapSession? _aap;
@@ -458,27 +458,45 @@ internal sealed class AppController : IDisposable
     private void HandleEars(AirPodsStatus s)
     {
         int count = s.InEarCount; // charging pods count as in the case
-        if (s.RawStatus != _lastRawStatus || s.RawLid != _lastRawLid)
+        // Log when something meaningful changes, not every alternating advert from the two pods.
+        string lid = LidTracker.FromPodInCase(s) ? (LidTracker.IsOpen(s) ? "open" : "closed") : "-";
+        string signature = $"{s.LeftInEar}{s.RightInEar}{s.LeftCharging}{s.RightCharging}{lid}";
+        if (signature != _lastEarSignature)
         {
-            _lastRawStatus = s.RawStatus;
-            _lastRawLid = s.RawLid;
-            var entry = $"{s.Timestamp.LocalDateTime:HH:mm:ss}  lid 0x{s.RawLid:X2}  status 0x{s.RawStatus:X2} " +
-                        $"(bits {Convert.ToString(s.RawStatus, 2).PadLeft(8, '0')})  read as L={(s.LeftInEar ? "in" : "out")} " +
-                        $"R={(s.RightInEar ? "in" : "out")} charging L={s.LeftCharging} R={s.RightCharging} → {count} in ear";
-            _earLog.Enqueue(entry);
-            while (_earLog.Count > 30) _earLog.Dequeue();
-            Log.Write("Ear status: " + entry);
+            _lastEarSignature = signature;
+            EarLog($"L {(s.LeftInEar ? "in" : "out")}{(s.LeftCharging ? " (charging)" : "")}, " +
+                   $"R {(s.RightInEar ? "in" : "out")}{(s.RightCharging ? " (charging)" : "")} → {count} in ear, " +
+                   $"lid {lid}   [status 0x{s.RawStatus:X2}, lid 0x{s.RawLid:X2}]", s.Timestamp);
         }
         ActOnEars(_ear.Observe(count, s.Timestamp), "advertisement");
         if (_ear.InEarCount is int stable) OnEarsChanged(stable);
     }
 
+    private void EarLog(string text, DateTimeOffset? at = null)
+    {
+        var entry = $"{(at ?? DateTimeOffset.Now).LocalDateTime:HH:mm:ss}  {text}";
+        _earLog.Enqueue(entry);
+        while (_earLog.Count > 40) _earLog.Dequeue();
+        Log.Write("Ears: " + entry);
+    }
+
     private void ActOnEars(EarAction action, string source)
     {
         // Track state always, act only when the PC is the one playing, and never mid-call.
-        if (action == EarAction.None || !_cfg.EarDetection || !_connected || _calls.InCall) return;
-        Log.Write($"Ear detection: {action} (from {source}, {_ear.InEarCount} in ear)");
-        _ = action == EarAction.Pause ? _media.PauseAllAsync() : _media.ResumeAsync();
+        if (action == EarAction.None) return;
+        string? skip = !_cfg.EarDetection ? "ear detection is off"
+                     : !_connected ? "AirPods not connected to this PC"
+                     : _calls.InCall ? "in a call" : null;
+        if (skip is not null) { EarLog($"→ would {action.ToString().ToLower()}, skipped: {skip}"); return; }
+        _ = RunEarActionAsync(action, source);
+    }
+
+    private async Task RunEarActionAsync(EarAction action, string source)
+    {
+        int n = action == EarAction.Pause ? await _media.PauseAllAsync() : await _media.ResumeAsync();
+        EarLog(action == EarAction.Pause
+            ? $"→ PAUSE ({_ear.InEarCount} in ear, from {source}): paused {n} player(s){(n == 0 ? " — nothing was playing" : "")}"
+            : $"→ RESUME ({_ear.InEarCount} in ear, from {source}): resumed {n} player(s){(n == 0 ? " — nothing paused by PodBridge" : "")}");
     }
 
     // ---------------- Advanced features (optional driver) ----------------
@@ -752,7 +770,7 @@ internal sealed class AppController : IDisposable
         sb.AppendLine().AppendLine($"Advanced features: enabled={_cfg.AdvancedFeatures} driver installed={_driverInstalled} " +
                                    $"session={(_aap is null ? "none" : $"open, mode={_aap.NoiseMode}, CA={_aap.ConversationAwareness}")}");
         sb.AppendLine().AppendLine($"Lid: adverts every ~{_lidCadence.Threshold.TotalMilliseconds / 4:0} ms (closes card after {_lidCadence.Threshold.TotalMilliseconds:0} ms of silence)");
-        sb.AppendLine().AppendLine("In-ear / lid byte changes (newest last):");
+        sb.AppendLine().AppendLine("Ears, lid and ear-detection actions (newest last):");
         foreach (var line in _earLog) sb.AppendLine("  " + line);
 
         sb.AppendLine().AppendLine($"Windows-reported battery: {_windowsBattery?.ToString() ?? "none"}");
