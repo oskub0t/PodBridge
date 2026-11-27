@@ -6,12 +6,12 @@ using PodBridge.Core.Aap;
 namespace PodBridge.App.Platform;
 
 /// <summary>
-/// Talks to the OPTIONAL PodBridge AAP driver (installed separately, needs admin; see
+/// Talks to the OPTIONAL PodBridge AAP driver (driver/, installed separately with admin; see
 /// docs/advanced-features.md). Contract with the driver:
-///   - it registers device interface <see cref="InterfaceGuid"/> per connected AirPods,
-///     enabled while their AAP channel (L2CAP PSM 0x1001) is open;
-///   - each ReadFile returns exactly one complete AAP packet, each WriteFile sends one;
-///   - the handle fails with an error when the AirPods disconnect.
+///   - it registers device interface <see cref="InterfaceGuid"/> for the AirPods' AAP device node;
+///   - opening the interface opens the L2CAP channel (PSM 0x1001), closing it closes the channel;
+///   - each ReadFile returns exactly one AAP packet, each WriteFile sends one;
+///   - I/O fails once the AirPods disconnect.
 /// Opening the interface needs no admin. If no driver is installed, nothing here is ever used.
 /// </summary>
 internal sealed class AapDriverTransport : IAapTransport

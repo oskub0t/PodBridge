@@ -7,8 +7,8 @@ Some AirPods features can only be reached through Apple's private control protoc
 that needs a kernel driver. This document describes the optional **PodBridge AAP driver**: what it
 would unlock, how users opt in, and the contract between the app and the driver.
 
-> **Status:** the app side is built and unit-tested. **The driver does not exist yet.** Building it
-> needs Windows, the WDK and a kernel debugger. Contributions welcome; see [Building the driver](#building-the-driver).
+> **Status:** the app side is built and unit-tested. **The driver is written but has never been
+> compiled or run** ([`driver/`](../driver/README.md)). Building it needs Windows and the WDK.
 
 ## What it unlocks
 
@@ -64,24 +64,22 @@ AirPods ──L2CAP PSM 0x1001 (AAP)──► PodBridge AAP driver (KMDF, kernel
 
 ## Driver contract
 
-The app relies on exactly this, so a driver can be written and tested against it independently.
+The app relies on exactly this. The reference implementation is in [`driver/`](../driver/README.md).
 
-1. **Binding.** The driver is a Bluetooth profile driver for the AirPods' AAP service,
-   UUID `74ec2172-0bad-4d01-8f77-997b2be0722a`. Its INF matches the BTHENUM hardware ID Windows
-   creates for that service on the paired AirPods.
-2. **Channel.** When the device starts, the driver opens an L2CAP channel to the AirPods on
-   PSM `0x1001` (`BRB_L2CA_OPEN_CHANNEL`). It closes it on removal.
-3. **Interface.** While the channel is open, the driver enables device interface
-   `{14937a53-ba6b-4b1f-ba4b-2e3ebe1c57cb}`. It disables it when the channel closes. The interface
-   must be openable by the interactive user (no admin): set a suitable SDDL in the INF.
-4. **I/O.**
-   - `WriteFile`: the buffer is one AAP packet; send it as one L2CAP SDU.
-   - `ReadFile`: complete with exactly one received L2CAP SDU (one AAP packet). Queue reads in
-     order, and drop the oldest if no read is pending and the queue exceeds 64 packets.
-   - When the channel closes, complete pending reads with an error, and fail new I/O.
-5. **No protocol logic in the kernel.** The driver moves bytes; parsing and commands stay in the
+1. **Binding.** The driver attaches to the device node Windows creates for the AirPods' AAP
+   service (UUID `74ec2172-0bad-4d01-8f77-997b2be0722a`). `driver/check-aap-service.ps1` shows
+   whether that node exists and its exact hardware ID.
+2. **Interface.** It registers device interface `{14937a53-ba6b-4b1f-ba4b-2e3ebe1c57cb}`, openable
+   by the interactive user without admin (SDDL in the INF).
+3. **Channel follows the handle.** `CreateFile` opens the L2CAP channel to PSM `0x1001` and fails if
+   the AirPods can't be reached. `CloseHandle` closes it. Only one handle at a time; a second open
+   fails with a sharing violation.
+4. **I/O.** `WriteFile` sends one AAP packet as one L2CAP SDU. `ReadFile` completes with one
+   received SDU (one AAP packet). The app always keeps one read pending.
+5. **Disconnect.** When the AirPods drop the channel, pending and new I/O fail; the app closes the
+   handle and retries later.
+6. **No protocol logic in the kernel.** The driver moves bytes; parsing and commands stay in the
    app, where they're testable and safe to change.
-6. **One open handle at a time** is enough. A second open may fail with `ERROR_ACCESS_DENIED`.
 
 ## Protocol (as implemented in `AapCodec`)
 
@@ -102,17 +100,8 @@ that project is GPL-licensed). **Unverified on Windows.** All packets start with
 
 ## Building the driver
 
-Needs a Windows PC with admin, Visual Studio, the **WDK**, and ideally a second machine or VM for
-kernel debugging (Bluetooth pass-through to a VM is unreliable, so a spare laptop is better).
-
-1. KMDF driver based on Microsoft's *Bluetooth Echo L2CAP profile driver* sample
-   (`bthecho`, Windows-driver-samples), client side.
-2. Implement the contract above. Start with logging every received packet; the app's
-   *Copy Diagnostics* will show what the session sees.
-3. Test-sign: `bcdedit /set testsigning on` on the test PC only, then install with `pnputil /add-driver podbridge-aap.inf /install`.
-4. Validate with real AirPods: handshake → notifications → battery → noise-control switching.
-5. Release: Microsoft attestation signing through Partner Center (needs an EV code-signing
-   certificate). An installer (or `pnputil`) for install and uninstall.
+See [`driver/README.md`](../driver/README.md): pre-check script, build, test-signing, install and
+removal, debugging, and the first-run checklist.
 
 ## Test plan for the first driver build
 

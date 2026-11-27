@@ -1,0 +1,29 @@
+name: Driver
+
+# Builds the optional AAP driver (test-signed, for test machines only).
+# Needs a runner image with the Windows Driver Kit; windows-2022 has shipped with it.
+on:
+  push:
+    branches: [main]
+    paths: ["driver/**", ".github/workflows/driver.yml"]
+  pull_request:
+    paths: ["driver/**", ".github/workflows/driver.yml"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: microsoft/setup-msbuild@v2
+
+      - name: Build driver (Release x64)
+        run: msbuild driver/PodBridgeAap/PodBridgeAap.vcxproj /p:Configuration=Release /p:Platform=x64 /m
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: podbridgeaap-x64-testsigned
+          path: |
+            driver/PodBridgeAap/x64/Release/PodBridgeAap/*
+            driver/PodBridgeAap/x64/Release/*.sys

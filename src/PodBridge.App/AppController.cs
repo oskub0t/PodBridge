@@ -47,6 +47,11 @@ internal sealed class AppController : IDisposable
     private readonly TrayIcon _tray = new();
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
 
+    // Case-open cards close when the lid closes, like on iOS: the AirPods stop advertising then.
+    private static readonly TimeSpan LidClosedAfter = TimeSpan.FromSeconds(2.5);
+    private readonly DispatcherTimer _lidTimer = new() { Interval = TimeSpan.FromMilliseconds(300) };
+    private ushort? _cardCaseModel;
+
     private readonly Dictionary<ushort, AirPodsStatus> _seen = [];
     private readonly Dictionary<ushort, DateTimeOffset> _learnPrompted = [];
     private readonly ModelSightings _sightings = new();
@@ -113,6 +118,7 @@ internal sealed class AppController : IDisposable
         _tray.QuitRequested += Quit;
         _tray.SettingsRequested += OpenSettings;
         _timer.Tick += (_, _) => Tick();
+        _lidTimer.Tick += (_, _) => CheckLid();
     }
 
     /// <summary>
@@ -168,7 +174,7 @@ internal sealed class AppController : IDisposable
         if (_card is { IsVisible: true }) return;
         _learnPrompted[s.ModelId] = s.Timestamp;
 
-        var card = ShowCard(ModelName(s.ModelId) ?? "AirPods nearby", BatteryView.Live(s), CardState.Learn);
+        var card = ShowCard(ModelName(s.ModelId) ?? "AirPods nearby", BatteryView.Live(s), CardState.Learn, caseModel: s.ModelId);
         card.PrimaryClicked += () => Adopt(s);
         card.SecondaryClicked += () => { _rejected.Add(s.ModelId); card.Dismiss(); };
     }
@@ -203,12 +209,12 @@ internal sealed class AppController : IDisposable
 
         if (_connected)
         {
-            if (_cfg.ShowPopup) ShowCard(DeviceTitle, MyBattery(), CardState.Connected);
+            if (_cfg.ShowPopup) ShowCard(DeviceTitle, MyBattery(), CardState.Connected, caseModel: s.ModelId);
             return;
         }
         if (_endpoints is null)
         {
-            var card = ShowCard(DeviceTitle, MyBattery(), CardState.NotPaired);
+            var card = ShowCard(DeviceTitle, MyBattery(), CardState.NotPaired, caseModel: s.ModelId);
             card.PrimaryClicked += () => { OpenBluetoothSettings(); card.Dismiss(); };
             return;
         }
@@ -217,7 +223,8 @@ internal sealed class AppController : IDisposable
         if (auto) Connect();
         if (_cfg.ShowPopup || !auto)
         {
-            var card = ShowCard(DeviceTitle, MyBattery(), _connectRequestedAt is null ? CardState.Connect : CardState.Connecting);
+            var card = ShowCard(DeviceTitle, MyBattery(), _connectRequestedAt is null ? CardState.Connect : CardState.Connecting,
+                caseModel: s.ModelId);
             card.PrimaryClicked += () =>
             {
                 switch (card.State)
@@ -234,14 +241,30 @@ internal sealed class AppController : IDisposable
     private BatteryView? MyBattery() =>
         _cfg.MyModelId is ushort id && _battery.ModelId == id ? _battery.View(DateTimeOffset.Now) : null;
 
-    private ConnectCard ShowCard(string title, BatteryView? battery, CardState state, string? detail = null)
+    /// <param name="caseModel">Set for cards that appeared because a case opened: they close when that
+    /// case's lid closes. Null for cards with other reasons (e.g. "Move to This PC").</param>
+    private ConnectCard ShowCard(string title, BatteryView? battery, CardState state, string? detail = null,
+        ushort? caseModel = null)
     {
+        _cardCaseModel = caseModel;
+        if (caseModel is not null) _lidTimer.Start();
         _card?.Close();
         var card = new ConnectCard();
         card.Closed += (_, _) => { if (_card == card) _card = null; };
         _card = card;
         card.Show(title, battery, state, detail);
         return card;
+    }
+
+    private void CheckLid()
+    {
+        if (_card is not { IsVisible: true } card || _cardCaseModel is not ushort model) { _lidTimer.Stop(); return; }
+        if (!_seen.TryGetValue(model, out var last)) return;
+        if (DateTimeOffset.Now - last.Timestamp <= LidClosedAfter) return;
+        Log.Write("Case closed: dismissing card");
+        _lidTimer.Stop();
+        _cardCaseModel = null;
+        card.Dismiss();
     }
 
     // ---------------- Connection ----------------
@@ -661,6 +684,7 @@ internal sealed class AppController : IDisposable
     public void Dispose()
     {
         _timer.Stop();
+        _lidTimer.Stop();
         StopAap();
         _ble.Dispose();
         _tray.Dispose();
