@@ -239,3 +239,22 @@ public class CapturedAdvertTests
     public void Find_my_suffix_is_hidden(string name, string shown) =>
         Assert.Equal(shown, PodBridge.Core.Audio.EndpointResolver.DisplayName(name));
 }
+
+public class InCaseFieldCaptureTests
+{
+    // Both AirPods Pro 3 charging in an open case: status alternates 0x15 / 0x75 as each pod
+    // advertises. Neither must read as "in ear".
+    [Theory]
+    [InlineData(0x15)]
+    [InlineData(0x75)]
+    public void Pods_charging_in_case_are_not_in_ear(byte status)
+    {
+        var bytes = Convert.FromHexString("07190127201588B634000434AC5F4C95690298177BA4B46CA8DD1B");
+        bytes[5] = status;
+        var s = ProximityPairingParser.TryParse(bytes, -46, DateTimeOffset.UnixEpoch)!;
+        Assert.Equal(0, s.InEarCount);
+        Assert.Equal(80, s.LeftPercent);
+        Assert.Equal(80, s.RightPercent);
+        Assert.True(s.LeftCharging && s.RightCharging);
+    }
+}

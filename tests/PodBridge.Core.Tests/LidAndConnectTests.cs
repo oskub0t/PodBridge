@@ -9,44 +9,74 @@ public class AdvertCadenceTests
     private static DateTimeOffset Ms(int ms) => T0.AddMilliseconds(ms);
 
     [Fact]
-    public void Fast_advertiser_is_declared_gone_quickly()
+    public void Field_rhythm_of_127_ms_tolerates_scanning_pauses()
     {
         var c = new AdvertCadence();
-        for (int i = 0; i <= 10; i++) c.Observe(Ms(i * 100)); // every 100 ms, last at 1000 ms
-        Assert.Equal(TimeSpan.FromMilliseconds(400), c.Threshold);
-        Assert.False(c.LooksGone(Ms(1300)));
-        Assert.True(c.LooksGone(Ms(1450)));
+        for (int i = 0; i <= 10; i++) c.Observe(Ms(i * 127)); // last at 1270 ms
+        Assert.Equal(TimeSpan.FromSeconds(1.5), c.Threshold);  // 10 × 127 ms clamped up to the minimum
+        Assert.False(c.LooksGone(Ms(1270 + 800)));             // a 0.8 s pause is not "gone"
+        Assert.True(c.LooksGone(Ms(1270 + 1600)));
     }
 
     [Fact]
-    public void Never_faster_than_the_minimum()
+    public void Slower_rhythm_scales_and_caps()
     {
         var c = new AdvertCadence();
-        for (int i = 0; i <= 10; i++) c.Observe(Ms(i * 20));
-        Assert.Equal(TimeSpan.FromMilliseconds(350), c.Threshold);
+        for (int i = 0; i <= 10; i++) c.Observe(Ms(i * 200));
+        Assert.Equal(TimeSpan.FromSeconds(2), c.Threshold);
+        var d = new AdvertCadence();
+        for (int i = 0; i <= 10; i++) d.Observe(Ms(i * 1000));
+        Assert.Equal(TimeSpan.FromSeconds(3), d.Threshold);
     }
 
     [Fact]
-    public void Slow_or_unknown_rhythm_falls_back_to_max()
-    {
-        var c = new AdvertCadence();
-        c.Observe(Ms(0));
-        Assert.Equal(TimeSpan.FromSeconds(2.5), c.Threshold);
-        for (int i = 1; i <= 10; i++) c.Observe(Ms(i * 1000));
-        Assert.Equal(TimeSpan.FromSeconds(2.5), c.Threshold);
-    }
-
-    [Fact]
-    public void Duplicate_bursts_do_not_shrink_the_threshold()
+    public void Duplicate_bursts_are_ignored()
     {
         var c = new AdvertCadence();
         for (int i = 0; i <= 10; i++) { c.Observe(Ms(i * 200)); c.Observe(Ms(i * 200 + 1)); }
-        // gaps are ~199 ms (the 1 ms duplicates are ignored), so ~4 × 199 ms, not 4 × 1 ms
-        Assert.InRange(c.Threshold.TotalMilliseconds, 780, 800);
+        Assert.InRange(c.Threshold.TotalMilliseconds, 1980, 2000); // ~10 × 199 ms, not 10 × 1 ms
     }
 
     [Fact]
     public void Nothing_seen_is_not_gone() => Assert.False(new AdvertCadence().LooksGone(T0));
+}
+
+public class LidTrackerTests
+{
+    private static AirPodsStatus Field(string hex) =>
+        ProximityPairingParser.TryParse(Convert.FromHexString(hex), -46, DateTimeOffset.UnixEpoch)!;
+
+    // The user's capture with the lid closed (lid byte 0x3C) and the same advert with lid 0x34.
+    private const string Closed = "07190127201588B63C000434AC5F4C95690298177BA4B46CA8DD1B";
+    private const string Open   = "07190127201588B634000434AC5F4C95690298177BA4B46CA8DD1B";
+
+    [Fact]
+    public void Field_bytes_decode_lid_state()
+    {
+        Assert.Equal(0x3C, Field(Closed).RawLid);
+        Assert.False(LidTracker.IsOpen(Field(Closed)));
+        Assert.True(LidTracker.IsOpen(Field(Open)));
+    }
+
+    [Fact]
+    public void Field_sequence_open_close_open_close()
+    {
+        var t = new LidTracker();
+        var seq = new[] { 0x33, 0x33, 0x3B, 0x3B, 0x34, 0x34, 0x3C, 0x3C };
+        var events = seq.Select(lid => t.Observe(new AirPodsStatus(0x2720, 80, 80, 60, true, true, false, false, false, -46,
+            DateTimeOffset.UnixEpoch) { RawLid = (byte)lid })).ToList();
+        Assert.Equal(new[] { LidEvent.None, LidEvent.None, LidEvent.Closed, LidEvent.None,
+                             LidEvent.Opened, LidEvent.None, LidEvent.Closed, LidEvent.None }, events);
+    }
+
+    [Fact]
+    public void Reset_makes_the_next_reading_a_fresh_start()
+    {
+        var t = new LidTracker();
+        t.Observe(Field(Closed));
+        t.Reset();
+        Assert.Equal(LidEvent.None, t.Observe(Field(Open)));
+    }
 }
 
 public class AutoConnectPolicyTests

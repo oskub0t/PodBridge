@@ -48,7 +48,8 @@ internal sealed class AppController : IDisposable
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
 
     // Case-open cards close when the lid closes, like on iOS: the AirPods stop advertising then.
-    private readonly AdvertCadence _lidCadence = new();
+    private readonly AdvertCadence _lidCadence = new();             // fallback: adverts stopped
+    private readonly Dictionary<ushort, LidTracker> _lids = [];     // primary: the lid byte
     private readonly DispatcherTimer _lidTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
 
     // Connect when a bud goes in (default) or when the case opens; sound follows your ears.
@@ -156,6 +157,7 @@ internal sealed class AppController : IDisposable
     private void OnAdvertisement(AirPodsStatus s)
     {
         if (s.ModelId == _cardCaseModel) _lidCadence.Observe(s.Timestamp);
+        HandleLid(s);
         if (s.Rssi >= -85)
         {
             _seen[s.ModelId] = s;
@@ -264,6 +266,34 @@ internal sealed class AppController : IDisposable
         _card = card;
         card.Show(title, battery, state, detail);
         return card;
+    }
+
+    /// <summary>
+    /// Lid byte: close the case card the moment the lid closes, and show it again on every real
+    /// opening (not just after 30 s of silence), like iOS.
+    /// </summary>
+    private void HandleLid(AirPodsStatus s)
+    {
+        bool mine = _presence.IsMine(s);
+        if (!mine && s.ModelId != _cardCaseModel) return;
+        if (!_lids.TryGetValue(s.ModelId, out var lid)) _lids[s.ModelId] = lid = new LidTracker();
+
+        // After an absence the "case appeared" path shows the card; start this tracker fresh.
+        if (mine && _presence.IsStale(s.Timestamp)) lid.Reset();
+
+        switch (lid.Observe(s))
+        {
+            case LidEvent.Closed when _card is { IsVisible: true } card && _cardCaseModel == s.ModelId:
+                Log.Write("Lid closed: dismissing card");
+                _lidTimer.Stop();
+                _cardCaseModel = null;
+                card.Dismiss();
+                break;
+            case LidEvent.Opened when mine && s.InEarCount == 0:
+                Log.Write("Lid opened");
+                OnCaseOpened(s);
+                break;
+        }
     }
 
     private void CheckLid()

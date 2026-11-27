@@ -11,9 +11,11 @@ public sealed class AdvertCadence
     private readonly Queue<TimeSpan> _gaps = new();
     private DateTimeOffset? _last;
 
-    public TimeSpan Min { get; init; } = TimeSpan.FromMilliseconds(350);
-    public TimeSpan Max { get; init; } = TimeSpan.FromSeconds(2.5);
-    public double Factor { get; init; } = 4;
+    // A fallback only (the lid byte closes cards instantly), so it must never fire on a brief
+    // Windows scanning pause: 0.5 s did in the field.
+    public TimeSpan Min { get; init; } = TimeSpan.FromSeconds(1.5);
+    public TimeSpan Max { get; init; } = TimeSpan.FromSeconds(3);
+    public double Factor { get; init; } = 10;
 
     public void Observe(DateTimeOffset at)
     {

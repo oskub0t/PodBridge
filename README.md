@@ -15,7 +15,7 @@ one self-contained file, no installer, no .NET needed, Windows 10 (2004+) or 11,
 | Close the case | Keeps showing the last known levels, dimmed and with their age ("Case · 2 h ago") | Remembered per part in `%LOCALAPPDATA%\PodBridge\battery.json`, like the iOS Batteries widget |
 | Put an AirPod in | Connects (or when the case opens, if you prefer) | Same driver call as *Settings → Bluetooth → Connect* (`KSPROPSETID_BtAudio` one-shot reconnect via Core Audio) |
 | | Moves sound to the AirPods only once one is in your ear, even if they connected while still in the case | In-ear flags in the advertisement |
-| Close the lid | The card disappears within a few hundred ms | Learns how often your AirPods advertise and notices when they stop |
+| Close the lid | The card disappears straight away; it reappears every time you open the lid | The advertisement's lid byte (bit 0x08 = closed; low bits count openings), with "adverts stopped" as a fallback |
 | | Sets the stereo output as default, keeps the PC's own mic as the everyday mic | Core Audio `IPolicyConfig` (what every audio switcher uses) |
 | Join a Teams call | Switches every default to the AirPods mic and hands-free output | Windows' own "which app is using the mic" record in HKCU |
 | | Warns if the AirPods mic gets no audio for 20 s | Peak meter on the AirPods capture endpoint |
