@@ -24,11 +24,7 @@ public partial class ConnectCard : Window
     {
         InitializeComponent();
         CardChrome.Prepare(this, CardBorder);
-        if (Artwork.Fancy)
-        {
-            HeroImage.Source = Artwork.Hero;
-            HeroImage.Visibility = Visibility.Visible;
-        }
+        if (Artwork.Fancy) HeroImage.Visibility = Visibility.Visible;
         CloseBtn.Click += (_, _) => Dismiss();
         PrimaryBtn.Click += (_, _) => PrimaryClicked?.Invoke();
         SecondaryBtn.Click += (_, _) => SecondaryClicked?.Invoke();
@@ -48,6 +44,12 @@ public partial class ConnectCard : Window
     {
         TitleText.Text = title;
         Batteries.Update(battery);
+        if (Artwork.Fancy && HeroImage.Source is null)
+        {
+            // The case just opened: play "lid opens, buds rise". Other reasons get the still.
+            if (state is CardState.MoveHere or CardState.Failed || !Artwork.HasFrames) HeroImage.Source = Artwork.Hero;
+            else Artwork.PlayCaseOpen(HeroImage);
+        }
         SetState(state, detail);
         if (!IsVisible) Show();
     }
