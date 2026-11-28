@@ -156,6 +156,7 @@ internal sealed class AppController : IDisposable
         _media.PlaybackStarted += () => _ui.BeginInvoke(() => OnPcAudioStarted(null));
         CardChrome.UseMaterials = _cfg.UseSystemMaterials;
         Artwork.Fancy = _cfg.FancyArtwork;
+        if (Artwork.Fancy) _ = Artwork.PreloadAsync(); // decode the animation frames in the background
 
         _tray.Clicked += TogglePanel;
         _tray.QuitRequested += Quit;
@@ -885,7 +886,8 @@ internal sealed class AppController : IDisposable
         long mine = _myAdverts - _perfMyAdverts;
         _perfSummary =
             $"CPU {cpuPct:0.00}% of the machine over the last {secs:0} s; " +
-            $"{_self.WorkingSet64 / (1024 * 1024)} MB memory\n" +
+            $"memory: {_self.WorkingSet64 / (1024 * 1024)} MB working set, {_self.PrivateMemorySize64 / (1024 * 1024)} MB private, " +
+            $"{GC.GetTotalMemory(false) / (1024 * 1024)} MB .NET heap; graphics tier {System.Windows.Media.RenderCapability.Tier >> 16} (2 = GPU, 0 = software)\n" +
             $"  Bluetooth filter {(_ble.AppleOnly ? "ON (Apple only)" : "OFF")}: " +
             $"{(counts.Delivered - _perfCounts.Delivered) / secs:0.0} adverts/s delivered, " +
             $"{(counts.Apple - _perfCounts.Apple) / secs:0.0}/s Apple, " +

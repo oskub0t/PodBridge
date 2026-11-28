@@ -46,9 +46,15 @@ public partial class ConnectCard : Window
         Batteries.Update(battery);
         if (Artwork.Fancy && HeroImage.Source is null)
         {
-            // The case just opened: play "lid opens, buds rise". Other reasons get the still.
-            if (state is CardState.MoveHere or CardState.Failed || !Artwork.HasFrames) HeroImage.Source = Artwork.Hero;
-            else Artwork.PlayCaseOpen(HeroImage);
+            // The case just opened: show the closed case now, play "lid opens, buds rise" once the
+            // card is actually on screen (otherwise the first frames are spent while it appears).
+            // Other reasons for the card get the still.
+            if (state is CardState.MoveHere or CardState.Failed) HeroImage.Source = Artwork.Hero;
+            else
+            {
+                HeroImage.Source = Artwork.FirstFrame ?? Artwork.Hero;
+                ContentRendered += (_, _) => Artwork.PlayCaseOpen(HeroImage);
+            }
         }
         SetState(state, detail);
         if (!IsVisible) Show();

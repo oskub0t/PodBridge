@@ -8,35 +8,20 @@ namespace PodBridge.App.Ui;
 /// <summary>
 /// The 3D-rendered AirPods artwork (one look for every model) and the fancy/performance switch.
 /// Rendered offline from a CC BY 4.0 model (see THIRD-PARTY-NOTICES.md and tools/render3d), so at
-/// runtime it's just pictures: a still for Settings, and a 30-frame "lid opens, buds rise"
-/// animation for the case-open card.
+/// runtime it's just pictures: a still for Settings, and a "lid opens, buds rise" frame animation
+/// (1 s) for the case-open card.
 /// </summary>
 internal static class Artwork
 {
-    public const int FrameCount = 30;
-    private static readonly TimeSpan FrameTime = TimeSpan.FromSeconds(1.0 / 30);
+    private static readonly TimeSpan Duration = TimeSpan.FromSeconds(1);
 
     public static bool Fancy { get; set; } = true;
 
     private static BitmapImage? _hero;
+    private static BitmapSource[]? _frames;
+    private static Task<BitmapSource[]>? _loading;
 
     public static BitmapImage Hero => _hero ??= Load("Assets/airpods-hero.png");
-
-    public static BitmapImage Frame(int i) => Load($"Assets/anim/f{i:00}.png");
-
-    private static bool? _hasFrames;
-
-    /// <summary>False if the animation frames aren't built into this exe (then the still is used).</summary>
-    public static bool HasFrames
-    {
-        get
-        {
-            if (_hasFrames is bool known) return known;
-            try { _hasFrames = Application.GetResourceStream(new Uri("pack://application:,,,/PodBridge;component/Assets/anim/f00.png")) is not null; }
-            catch (System.IO.IOException) { _hasFrames = false; }
-            return _hasFrames.Value;
-        }
-    }
 
     private static BitmapImage Load(string path)
     {
@@ -50,28 +35,53 @@ internal static class Artwork
     }
 
     /// <summary>
-    /// Plays the case-open animation once into <paramref name="target"/> and stops on the final
-    /// pose. Frames are decoded as they play (nothing large stays in memory). Respects Windows'
-    /// "Animation effects" setting: if it's off, the final frame is shown straight away.
+    /// Decodes every frame once, off the UI thread, so playback never stalls on decoding.
+    /// Counts the frames that are built in (0 = none: the still is used instead).
     /// </summary>
-    public static void PlayCaseOpen(Image target)
+    public static Task<BitmapSource[]> PreloadAsync() => _loading ??= Task.Run(() =>
     {
-        if (!HasFrames) { target.Source = Hero; return; }
-        if (!SystemParameters.ClientAreaAnimation)
+        var list = new List<BitmapSource>();
+        for (int i = 0; ; i++)
         {
-            target.Source = Frame(FrameCount - 1);
-            return;
+            System.Windows.Resources.StreamResourceInfo? res;
+            try { res = Application.GetResourceStream(new Uri($"pack://application:,,,/PodBridge;component/Assets/anim/f{i:00}.png")); }
+            catch (System.IO.IOException) { break; }
+            if (res is null) break;
+            using var stream = res.Stream;
+            var frame = BitmapFrame.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+            frame.Freeze();
+            list.Add(frame);
         }
-        var started = DateTime.UtcNow;
+        return _frames = list.ToArray();
+    });
+
+    /// <summary>The first frame (closed case) to show while the card appears, or null.</summary>
+    public static BitmapSource? FirstFrame => _frames is { Length: > 0 } f ? f[0] : null;
+
+    /// <summary>
+    /// Plays the case-open animation once and stops on the final pose. Call when the card is on
+    /// screen (ContentRendered): timing follows the display's frames (CompositionTarget.Rendering),
+    /// so it's as smooth as the screen allows and never slows down; it skips frames instead.
+    /// Respects Windows' "Animation effects" setting.
+    /// </summary>
+    public static async void PlayCaseOpen(Image target)
+    {
+        var frames = _frames ?? await PreloadAsync();
+        if (frames.Length == 0) { target.Source = Hero; return; }
+        if (!SystemParameters.ClientAreaAnimation) { target.Source = frames[^1]; return; }
+
+        TimeSpan? start = null;
         int shown = -1;
         void OnRendering(object? sender, EventArgs e)
         {
-            // Time-based, so a slow machine skips frames instead of slowing the animation down.
-            int i = Math.Min(FrameCount - 1, (int)((DateTime.UtcNow - started) / FrameTime));
-            if (i != shown) { target.Source = Frame(i); shown = i; }
-            if (i == FrameCount - 1 || !target.IsVisible && shown > 0) CompositionTarget.Rendering -= OnRendering;
+            var now = ((RenderingEventArgs)e).RenderingTime;
+            start ??= now;
+            double progress = (now - start.Value) / Duration;
+            int i = Math.Clamp((int)Math.Round(progress * (frames.Length - 1)), 0, frames.Length - 1);
+            if (i != shown) { target.Source = frames[i]; shown = i; }
+            if (i == frames.Length - 1 || !target.IsVisible) CompositionTarget.Rendering -= OnRendering;
         }
-        target.Source = Frame(0);
+        target.Source = frames[0];
         CompositionTarget.Rendering += OnRendering;
     }
 

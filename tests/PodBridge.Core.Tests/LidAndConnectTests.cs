@@ -77,9 +77,39 @@ public class LidTrackerTests
         var t = new LidTracker();
         AirPodsStatus L(int lid) => new(0x2720, 80, 80, 60, true, false, false, false, false, -46,
             DateTimeOffset.UnixEpoch) { RawLid = (byte)lid };
-        var events = new[] { 0x33, 0x13, 0x3B, 0x13, 0x3B, 0x13, 0x31 }.Select(x => t.Observe(L(x))).ToList();
+        var events = new[] { 0x33, 0x13, 0x3B, 0x13, 0x3B, 0x13, 0x34 }.Select(x => t.Observe(L(x))).ToList();
         Assert.Equal(new[] { LidEvent.None, LidEvent.None, LidEvent.Closed, LidEvent.None,
                              LidEvent.None, LidEvent.None, LidEvent.Opened }, events);
+    }
+
+    [Fact]
+    public void Late_reports_from_the_other_pod_are_ignored()
+    {
+        // The 0.4.4 field log (12.10.37–12.11.21), in-case adverts only, both pods interleaved.
+        // Old behaviour: 0x37 (opening #7) showed the card, then the left pod's late 0x3E (closed,
+        // opening #6) dismissed it straight away.
+        var t = new LidTracker();
+        AirPodsStatus L(int lid) => new(0x2720, 80, 80, 60, true, true, false, false, false, -43,
+            DateTimeOffset.UnixEpoch) { RawLid = (byte)lid };
+        int[] log = [0x31, 0x31, 0x31, 0x39, 0x32, 0x32, 0x3A, 0x33, 0x3B, 0x34, 0x3C, 0x35, 0x3D, 0x36,
+                     0x3E, 0x37, 0x3E, 0x37, 0x3F, 0x30, 0x38, 0x31, 0x39];
+        var events = log.Select(x => t.Observe(L(x))).Where(e => e != LidEvent.None).ToList();
+
+        // Strictly alternating, one Opened per real opening (#2 … #7, #0, #1), no flicker.
+        Assert.Equal(17, events.Count);
+        Assert.Equal(LidEvent.Closed, events[0]);
+        for (int i = 1; i < events.Count; i++) Assert.NotEqual(events[i - 1], events[i]);
+        Assert.Equal(8, events.Count(e => e == LidEvent.Opened));
+    }
+
+    [Fact]
+    public void Counter_wraps_from_7_to_0()
+    {
+        var t = new LidTracker();
+        AirPodsStatus L(int lid) => new(0x2720, 80, 80, 60, true, true, false, false, false, -43,
+            DateTimeOffset.UnixEpoch) { RawLid = (byte)lid };
+        t.Observe(L(0x3F));                                // closed, opening #7
+        Assert.Equal(LidEvent.Opened, t.Observe(L(0x30))); // opening #0 is newer
     }
 
     [Fact]
