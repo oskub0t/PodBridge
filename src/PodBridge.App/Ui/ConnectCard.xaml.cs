@@ -23,7 +23,7 @@ public partial class ConnectCard : Window
     public ConnectCard()
     {
         InitializeComponent();
-        CardChrome.Prepare(this, CardBorder);
+        CardChrome.Prepare(this, CardBorder, activeLook: true); // shown without focus: see CardChrome
         if (Artwork.Fancy) HeroImage.Visibility = Visibility.Visible;
         CloseBtn.Click += (_, _) => Dismiss();
         PrimaryBtn.Click += (_, _) => PrimaryClicked?.Invoke();

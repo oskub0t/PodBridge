@@ -316,7 +316,7 @@ internal sealed class AppController : IDisposable
     private void HandleLid(AirPodsStatus s)
     {
         bool mine = _presence.IsMine(s);
-        if (!mine && s.ModelId != _cardCaseModel) return;
+        if (!LidTracker.Feeds(s, mine, _cfg.MyModelId, _cardCaseModel)) return;
         if (!_lids.TryGetValue(s.ModelId, out var lid)) _lids[s.ModelId] = lid = new LidTracker();
 
         // After an absence the "case appeared" path shows the card; start this tracker fresh.
@@ -520,7 +520,7 @@ internal sealed class AppController : IDisposable
             EarLog($"L {(s.LeftInEar ? "in" : "out")}{(s.LeftCharging ? " (charging)" : "")}, " +
                    $"R {(s.RightInEar ? "in" : "out")}{(s.RightCharging ? " (charging)" : "")} " +
                    $"[from {((s.RawStatus & 0x20) != 0 ? "left" : "right")} pod] → {count} in ear, " +
-                   $"lid {lid}   [status 0x{s.RawStatus:X2}, lid 0x{s.RawLid:X2}]", s.Timestamp);
+                   $"lid {lid}   [status 0x{s.RawStatus:X2}, lid 0x{s.RawLid:X2}, {s.Rssi} dBm]", s.Timestamp);
         }
         ActOnEars(_ear.Observe(count, s.Timestamp), "advertisement");
         if (_ear.InEarCount is int stable) OnEarsChanged(stable);

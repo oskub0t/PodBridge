@@ -168,6 +168,20 @@ public class LidTrackerTests
     }
 
     [Fact]
+    public void Only_adverts_that_count_as_yours_feed_the_lid()
+    {
+        var weak = Pod('R', 0x34, DateTimeOffset.UnixEpoch) with { Rssi = -74 };
+        // Your model, too weak to count as yours: ignored even while your card is open.
+        Assert.False(LidTracker.Feeds(weak, mine: false, myModel: 0x2720, cardCaseModel: 0x2720));
+        Assert.True(LidTracker.Feeds(weak with { Rssi = -55 }, mine: true, myModel: 0x2720, cardCaseModel: null));
+        // Another model only while its own card is open (learn mode).
+        var other = weak with { ModelId = 0x3620 };
+        Assert.True(LidTracker.Feeds(other, mine: false, myModel: 0x2720, cardCaseModel: 0x3620));
+        Assert.False(LidTracker.Feeds(other, mine: false, myModel: 0x2720, cardCaseModel: 0x2720));
+        Assert.True(LidTracker.Feeds(other, mine: false, myModel: null, cardCaseModel: 0x3620));
+    }
+
+    [Fact]
     public void Counter_wraps_from_7_to_0()
     {
         var t = new LidTracker();

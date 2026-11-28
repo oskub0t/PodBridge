@@ -1,6 +1,6 @@
 # PodBridge handover
 
-State as of **28 Nov 2026, version 0.4.8** (`main`). Read this first when picking the project up.
+State as of **28 Nov 2026, version 0.4.9** (`main`). Read this first when picking the project up.
 `CLAUDE.md` has the short version of the working rules.
 
 ## What it is
@@ -79,7 +79,8 @@ Apple manufacturer data, type `0x07`, plain variant only (prefix `0x01`, 25 byte
   cross-pod counter ordering dropped real openings (no card for ~25 s). Since 0.4.7 `LidTracker`
   follows each pod on its own and uses the counter only to spot the other pod's late reports
   within a 3 s grace; it errs towards showing a card. The diagnostics timeline now shows its
-  decisions (`LID OPENED → showing card`, `lid report ignored: …`).
+  decisions (`LID OPENED → showing card`, `lid report ignored: …`). Only adverts at or above
+  MinRssi feed it (`LidTracker.Feeds`, 0.4.9); raw lines show the signal.
 - **Cadence**: ~127–375 ms with lid open, ~750 ms worn, keeps advertising ~4 s after lid close.
 - Windows does **not** report a battery level for these AirPods (HFP battery property empty).
 - Windows creates an "AAP Server" device node (`BTHENUM\{74ec2172-0bad-4d01-8f77-997b2be0722a}_VID&0001004c_PID&2027`) with no driver.
@@ -98,7 +99,7 @@ Field captures are kept as unit tests (`FeatureTests.cs`, `LidAndConnectTests.cs
   3. `.github/workflows/build.yml` (on `release: published`) builds on Windows, tests, and attaches
      `PodBridge.exe` and `PodBridge.zip`; installed copies get an update notification within a day.
      ≤0.4.7 updaters only know `PodBridge.exe` (~160 MB), 0.4.8+ download the zip (~65 MB).
-- Latest published Release: **v0.4.1**. 0.4.2–0.4.8 are on `main` only (owner publishes when ready).
+- Latest published Release: **v0.4.1**. 0.4.2–0.4.9 are on `main` only (owner publishes when ready).
 - `driver.yml` builds the driver on `windows-2022` (compiles cleanly at /W4 /WX; InfVerif fails to
   load on the runner, so the INF is unchecked). Node 20 deprecation warning on actions (harmless).
 - Claude Code cloud sessions: branch pushes work; **tag pushes and release creation are refused
@@ -127,11 +128,15 @@ Field captures are kept as unit tests (`FeatureTests.cs`, `LidAndConnectTests.cs
 1. **Owner to test 0.4.8** (from the Actions artifact): a card on every lid opening, including fast
    open/close and after the case lay closed for a while; the new tray icon (click, double click,
    right-click menu, keyboard Win+B → Enter, Explorer restart); Settings → Uninstall dialog; and
-   the memory line in diagnostics vs 0.4.6 (460 MB WS / 268 MB private). Then publish v0.4.8.
+   the memory line in diagnostics vs 0.4.6 (460 MB WS / 268 MB private). 0.4.8 tested: lid cards
+   and memory OK, one opening without a card (weak-signal advert fed the lid tracker; fixed in
+   0.4.9). Still to test on 0.4.9: case card now translucent (Acrylic kept while unfocused via
+   WM_NCACTIVATE), tray icon, uninstall dialog. Then publish v0.4.9.
 2. **Memory**: 0.4.6 reported 460 MB working set, 268 MB private, only 6 MB .NET heap, GPU tier 2.
-   So it's not our data. Main suspect was `EnableCompressionInSingleFile` (unpacks every loaded
-   assembly into private memory); 0.4.8 drops it and WinForms. Not yet measured on hardware.
-   Diagnostics list the loaded assemblies (0.4.7+).
+   0.4.8 (uncompressed, no WinForms) measured: **302 MB WS / 186 MB private** (−34 % / −31 %),
+   CPU 1.3 % while flipping the lid. Still loaded but probably avoidable: System.Drawing.Common,
+   GdiPlus, Net.WebClient, Serialization.Formatters, ConfigurationManager — likely pulled in by
+   Microsoft.Toolkit.Uwp.Notifications (could be replaced with the WinRT toast API directly).
 3. **Notifications show "off"** on the owner's PC; verify in Windows Settings → Notifications.
 4. **Split `AppController`** (connection, ears/lid, cards, calls, updates, diagnostics).
 5. Ideas not started: presentation clicker (stem presses via media session → arrow keys; needs a

@@ -46,6 +46,16 @@ public sealed class LidTracker
 
     public bool? Open => _open;
 
+    /// <summary>
+    /// Which adverts may feed the tracker. Your AirPods: only adverts that count as yours (signal at
+    /// least MinRssi), like everything else. Before 0.4.9 weaker ones fed it too: a weak "open"
+    /// was recorded but couldn't show a card, so the strong reports after it looked like repeats
+    /// and that opening got no card (0.4.8 field test). Another model: only while its own
+    /// (learn) card is open, so closing that case dismisses it.
+    /// </summary>
+    public static bool Feeds(AirPodsStatus s, bool mine, ushort? myModel, ushort? cardCaseModel) =>
+        s.ModelId == myModel ? mine : s.ModelId == cardCaseModel;
+
     /// <summary>Why the last contrary report was ignored, for the diagnostics timeline; null if it wasn't.</summary>
     public string? LastIgnored { get; private set; }
 
