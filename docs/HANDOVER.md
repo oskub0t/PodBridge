@@ -1,6 +1,6 @@
 # PodBridge handover
 
-State as of **28 Nov 2026, version 0.4.9** (`main`). Read this first when picking the project up.
+State as of **28 Nov 2026, version 0.4.9** (`main`, published). Read this first when picking the project up.
 `CLAUDE.md` has the short version of the working rules.
 
 ## What it is
@@ -99,7 +99,7 @@ Field captures are kept as unit tests (`FeatureTests.cs`, `LidAndConnectTests.cs
   3. `.github/workflows/build.yml` (on `release: published`) builds on Windows, tests, and attaches
      `PodBridge.exe` and `PodBridge.zip`; installed copies get an update notification within a day.
      ≤0.4.7 updaters only know `PodBridge.exe` (~160 MB), 0.4.8+ download the zip (~65 MB).
-- Latest published Release: **v0.4.1**. 0.4.2–0.4.9 are on `main` only (owner publishes when ready).
+- Latest published Release: **v0.4.9** (first one with `PodBridge.zip`).
 - `driver.yml` builds the driver on `windows-2022` (compiles cleanly at /W4 /WX; InfVerif fails to
   load on the runner, so the INF is unchecked). Node 20 deprecation warning on actions (harmless).
 - Claude Code cloud sessions: branch pushes work; **tag pushes and release creation are refused
@@ -125,18 +125,13 @@ Field captures are kept as unit tests (`FeatureTests.cs`, `LidAndConnectTests.cs
 
 ## Open work / next steps
 
-1. **Owner to test 0.4.8** (from the Actions artifact): a card on every lid opening, including fast
-   open/close and after the case lay closed for a while; the new tray icon (click, double click,
-   right-click menu, keyboard Win+B → Enter, Explorer restart); Settings → Uninstall dialog; and
-   the memory line in diagnostics vs 0.4.6 (460 MB WS / 268 MB private). 0.4.8 tested: lid cards
-   and memory OK, one opening without a card (weak-signal advert fed the lid tracker; fixed in
-   0.4.9). Still to test on 0.4.9: case card now translucent (Acrylic kept while unfocused via
-   WM_NCACTIVATE), tray icon, uninstall dialog. Then publish v0.4.9.
-   Measured on 0.4.9: the card reaches the screen 130–290 ms after the advert that opened the
-   case (224 ms on the first opening after an absence). Repeated openings feel on par with an
-   iPhone (owner). The first opening after a long close takes about 1 s in total, so most of it
-   happens before the first advert arrives (AirPods waking up, Windows' scan rhythm), outside
-   the app. Possible small win if wanted: pre-create the card window hidden.
+1. **0.4.9 is published and confirmed** (owner, 28 Nov): a card on every lid opening, card on
+   screen 110–320 ms after the advert, translucent case card, memory 292 MB WS / 179 MB private,
+   CPU 0.4 % at rest. Still unverified: the uninstall dialog, and the updater's zip path (first
+   exercised by the release after 0.4.9; ≤0.4.8 copies update from the plain exe).
+   Small things seen in the last log: a "Connected" card auto-closes after 4 s even with the lid
+   still open (iOS keeps it until the lid closes: owner to decide); Windows sometimes reports an
+   advert at -127 dBm, its "no signal reading" placeholder (ignored, below MinRssi).
 2. **Memory**: 0.4.6 reported 460 MB working set, 268 MB private, only 6 MB .NET heap, GPU tier 2.
    0.4.8 (uncompressed, no WinForms) measured: **302 MB WS / 186 MB private** (−34 % / −31 %),
    CPU 1.3 % while flipping the lid. Still loaded but probably avoidable: System.Drawing.Common,
