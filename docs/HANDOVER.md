@@ -1,6 +1,6 @@
 # PodBridge handover
 
-State as of **28 Nov 2026, version 0.4.7** (`main`). Read this first when picking the project up.
+State as of **28 Nov 2026, version 0.4.8** (`main`). Read this first when picking the project up.
 `CLAUDE.md` has the short version of the working rules.
 
 ## What it is
@@ -54,7 +54,6 @@ tests/PodBridge.Core.Tests
 driver/                 optional KMDF driver (parked, see below)
 tools/icon, tools/render3d   app icon and 3D artwork generators
 assets/3d/airpods_4.glb CC BY 4.0 model (credit in THIRD-PARTY-NOTICES.md)
-release/PodBridge.exe   prebuilt exe, committed on purpose (owner's choice)
 ```
 
 Runtime files: config `%APPDATA%\PodBridge\config.json`; log, battery memory and update downloads
@@ -90,14 +89,16 @@ Field captures are kept as unit tests (`FeatureTests.cs`, `LidAndConnectTests.cs
 
 ## Building, releasing, CI
 
-- Build/test anywhere: `dotnet test`; Windows exe: `dotnet publish src/PodBridge.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -o out`.
+- Build/test anywhere: `dotnet test`; Windows exe: `dotnet publish src/PodBridge.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o out` (deliberately **not** compressed: see Decisions).
   WPF/WinRT build fine on Linux (`EnableWindowsTargeting`); the app can only run on Windows.
 - **Release flow** (works since v0.4.1):
-  1. bump `<Version>` in `src/PodBridge.App/PodBridge.App.csproj`, commit exe to `release/`, push;
+  1. bump `<Version>` in `src/PodBridge.App/PodBridge.App.csproj`, commit, push. CI uploads the exe
+     as a run artifact (`PodBridge-win-x64`): that's how the owner tests builds before a Release;
   2. the owner publishes a Release on github.com with tag `vX.Y.Z` (target `main`);
   3. `.github/workflows/build.yml` (on `release: published`) builds on Windows, tests, and attaches
-     `PodBridge.exe`; installed copies get an update notification within a day.
-- Latest published Release: **v0.4.1**. 0.4.2–0.4.7 are on `main` only (owner publishes when ready).
+     `PodBridge.exe` and `PodBridge.zip`; installed copies get an update notification within a day.
+     ≤0.4.7 updaters only know `PodBridge.exe` (~160 MB), 0.4.8+ download the zip (~65 MB).
+- Latest published Release: **v0.4.1**. 0.4.2–0.4.8 are on `main` only (owner publishes when ready).
 - `driver.yml` builds the driver on `windows-2022` (compiles cleanly at /W4 /WX; InfVerif fails to
   load on the runner, so the INF is unchecked). Node 20 deprecation warning on actions (harmless).
 - Claude Code cloud sessions: branch pushes work; **tag pushes and release creation are refused
@@ -109,9 +110,12 @@ Field captures are kept as unit tests (`FeatureTests.cs`, `LidAndConnectTests.cs
 - **No test-signing / driver work** for now (owner: "no test mode"). The AAP driver
   (`driver/`, `docs/advanced-features.md`) is parked: written, compiles in CI, never run. The app
   side (`AapSession`, Settings "Advanced features", off by default) stays dormant without it.
-- **Exe committed in `release/`** (owner wants it in the repo). Each copy adds ~80 MB to history
-  (repo history was ~74 MB after a rewrite; it has grown again). Consider stopping once Releases are
-  routine.
+- **Exe no longer committed** (since 0.4.8, owner agreed). It's built uncompressed (compressed
+  single-file unpacks every loaded assembly into private memory), ~160 MB, over GitHub's 100 MB
+  file limit anyway. Old copies remain in history (~80 MB each).
+- **No WinForms** (since 0.4.8): it was only the tray icon and the uninstall TaskDialog. Tray icon
+  is Shell_NotifyIcon (`Ui/TrayIcon.cs`, notify-icon version 4, native menu, re-added when Explorer
+  restarts); uninstall is a WPF dialog. The exe shrank from ~192 to ~160 MB.
 - **One 3D artwork for every model** (owner's call): "AirPods 4" by Falah3D, CC BY 4.0, pre-rendered
   with three.js (no runtime 3D). Credit required in-app (Settings → About), README, notices.
 - **Commits** as `oskub0t <184001172+oskub0t@users.noreply.github.com>` with
@@ -120,16 +124,14 @@ Field captures are kept as unit tests (`FeatureTests.cs`, `LidAndConnectTests.cs
 
 ## Open work / next steps
 
-1. **Owner to test 0.4.7**: a card on every lid opening, including fast open/close and after the
-   case lay closed for a while (animation itself confirmed OK on 0.4.6). Then publish v0.4.7.
+1. **Owner to test 0.4.8** (from the Actions artifact): a card on every lid opening, including fast
+   open/close and after the case lay closed for a while; the new tray icon (click, double click,
+   right-click menu, keyboard Win+B → Enter, Explorer restart); Settings → Uninstall dialog; and
+   the memory line in diagnostics vs 0.4.6 (460 MB WS / 268 MB private). Then publish v0.4.8.
 2. **Memory**: 0.4.6 reported 460 MB working set, 268 MB private, only 6 MB .NET heap, GPU tier 2.
-   So it's not our data. Main suspect: `EnableCompressionInSingleFile` unpacks every loaded
-   assembly into private memory (the app's managed assemblies total 174 MB uncompressed:
-   Windows SDK projection 24 MB, CoreLib 15, PresentationFramework 15, WinForms 13 …). CI now
-   also uploads an uncompressed exe (`PodBridge-win-x64-uncompressed` artifact on pushes) for an
-   A/B comparison. It is ~192 MB, over GitHub's 100 MB file limit, so it can't go in `release/`;
-   switching would mean shipping it via Releases only. Diagnostics list the loaded assemblies
-   (0.4.7+). Smaller lever: drop WinForms (only used for the tray icon).
+   So it's not our data. Main suspect was `EnableCompressionInSingleFile` (unpacks every loaded
+   assembly into private memory); 0.4.8 drops it and WinForms. Not yet measured on hardware.
+   Diagnostics list the loaded assemblies (0.4.7+).
 3. **Notifications show "off"** on the owner's PC; verify in Windows Settings → Notifications.
 4. **Split `AppController`** (connection, ears/lid, cards, calls, updates, diagnostics).
 5. Ideas not started: presentation clicker (stem presses via media session → arrow keys; needs a

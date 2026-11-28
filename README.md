@@ -5,7 +5,7 @@
 A small Windows tray app that makes AirPods behave on a Windows PC more like they do on a Mac,
 **without admin rights**. Built for locked-down work laptops.
 
-**[Download PodBridge.exe](https://github.com/oskub0t/PodBridge/raw/main/release/PodBridge.exe)**:
+**[Download PodBridge.exe](https://github.com/oskub0t/PodBridge/releases/latest/download/PodBridge.exe)**:
 one self-contained file, no installer, no .NET needed, Windows 10 (2004+) or 11, x64.
 
 | You do | PodBridge does | How (all per-user, no admin) |
@@ -153,8 +153,9 @@ dotnet publish src/PodBridge.App -c Release -r win-x64 --self-contained true -p:
 
 The .NET 10 SDK can be installed per-user on Windows without admin (`dotnet-install.ps1`); the
 solution also builds on Linux/macOS (`EnableWindowsTargeting`). GitHub Actions builds and tests
-every push; pushing a `v*` tag publishes the exe to a GitHub Release. The exe in `release/` is
-updated for releases only, because every committed copy stays in the git history.
+every push (test builds are under the run's *Artifacts*); publishing a GitHub Release attaches
+`PodBridge.exe` and `PodBridge.zip` to it, and installed copies update from there. The exe is no
+longer committed to the repository.
 
 ```
 src/PodBridge.Core     platform-free logic, unit-tested (parser, filter, calls, audio modes, features, AAP protocol)

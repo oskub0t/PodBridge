@@ -978,7 +978,7 @@ internal sealed class AppController : IDisposable
     private async Task InstallUpdateAsync()
     {
         if (_availableUpdate is not ReleaseInfo r || _updateBusy) return;
-        if (!Installer.IsRunningInstalled || r.ExeUrl is null)
+        if (!Installer.IsRunningInstalled || !r.HasDownload)
         {
             // Not installed (e.g. run from Downloads): there's nothing to swap in place.
             OpenUri(r.PageUrl);

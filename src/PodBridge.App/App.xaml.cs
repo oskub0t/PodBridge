@@ -1,7 +1,6 @@
 using System.Windows;
 using PodBridge.App.Platform;
 using PodBridge.App.Ui;
-using Forms = System.Windows.Forms;
 
 namespace PodBridge.App;
 
@@ -53,32 +52,7 @@ public partial class App : Application
     /// <summary>Settings → Apps → Uninstall (or Settings → Uninstall in PodBridge).</summary>
     private static void RunUninstall()
     {
-        bool removeSettings;
-        try
-        {
-            Forms.Application.EnableVisualStyles();
-            var keep = new Forms.TaskDialogVerificationCheckBox("Also remove my PodBridge settings");
-            var uninstall = new Forms.TaskDialogButton("Uninstall");
-            var page = new Forms.TaskDialogPage
-            {
-                Caption = "PodBridge",
-                Heading = "Uninstall PodBridge?",
-                Text = "This removes PodBridge from Start and Settings → Apps, turns off Open at login, and deletes the app. Your AirPods stay paired with Windows.",
-                Buttons = { uninstall, Forms.TaskDialogButton.Cancel },
-                Verification = keep,
-                Icon = Forms.TaskDialogIcon.None,
-            };
-            if (Forms.TaskDialog.ShowDialog(page) != uninstall) return;
-            removeSettings = keep.Checked;
-        }
-        catch (Exception ex)
-        {
-            Log.Write($"Task dialog unavailable ({ex.Message}); using a message box");
-            var answer = MessageBox.Show("Uninstall PodBridge? Your settings are kept.", "PodBridge",
-                MessageBoxButton.OKCancel, MessageBoxImage.Question);
-            if (answer != MessageBoxResult.OK) return;
-            removeSettings = false;
-        }
+        if (UninstallDialog.Ask() is not bool removeSettings) return;
 
         SingleInstance.WaitForOtherToExit(TimeSpan.FromSeconds(10)); // close the running tray app first
         Installer.Uninstall(removeSettings);

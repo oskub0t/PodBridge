@@ -28,6 +28,21 @@ public class ReleaseInfoTests
         Assert.False(r.IsNewerThan(new Version(0, 4, 1)));
     }
 
+    [Fact]
+    public void Reads_both_the_exe_and_the_zipped_exe()
+    {
+        var r = ReleaseInfo.Parse("""
+        { "tag_name": "v0.4.8", "assets": [
+          { "name": "PodBridge.exe", "browser_download_url": "https://x.invalid/PodBridge.exe", "size": 201318444 },
+          { "name": "PodBridge.zip", "browser_download_url": "https://x.invalid/PodBridge.zip", "size": 78000000 } ] }
+        """)!;
+        Assert.Equal("https://x.invalid/PodBridge.exe", r.ExeUrl); // older PodBridge versions use this
+        Assert.Equal("https://x.invalid/PodBridge.zip", r.ZipUrl);
+        Assert.Equal(78000000, r.ZipSize);
+        Assert.True(r.HasDownload);
+        Assert.False(ReleaseInfo.Parse("""{"tag_name":"0.6"}""")!.HasDownload);
+    }
+
     [Theory]
     [InlineData("""{"tag_name":"v0.5.0","draft":true}""")]
     [InlineData("""{"tag_name":"v0.5.0","prerelease":true}""")]

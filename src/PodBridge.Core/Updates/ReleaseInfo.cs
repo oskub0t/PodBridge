@@ -3,8 +3,17 @@ using System.Text.Json;
 namespace PodBridge.Core.Updates;
 
 /// <summary>A published PodBridge release, read from GitHub's "latest release" API response.</summary>
+/// <param name="ExeUrl">The plain exe asset. Every PodBridge up to 0.4.7 downloads only this, so
+/// releases must keep attaching it.</param>
 public sealed record ReleaseInfo(Version Version, string Tag, string PageUrl, string? ExeUrl, long ExeSize)
 {
+    /// <summary>The same exe zipped (about 65 MB instead of about 160 MB); preferred when present.</summary>
+    public string? ZipUrl { get; init; }
+    public long ZipSize { get; init; }
+
+    /// <summary>There is something to download and install.</summary>
+    public bool HasDownload => ZipUrl is not null || ExeUrl is not null;
+
     public const string LatestReleaseApi = "https://api.github.com/repos/oskub0t/PodBridge/releases/latest";
     public const string ReleasesPage = "https://github.com/oskub0t/PodBridge/releases/latest";
 
@@ -21,16 +30,18 @@ public sealed record ReleaseInfo(Version Version, string Tag, string PageUrl, st
             var page = root.TryGetProperty("html_url", out var h) ? h.GetString() : null;
             if (tag is null || ParseVersion(tag) is not Version v) return null;
 
-            string? exe = null;
-            long size = 0;
+            string? exe = null, zip = null;
+            long exeSize = 0, zipSize = 0;
             if (root.TryGetProperty("assets", out var assets))
                 foreach (var a in assets.EnumerateArray())
-                    if (string.Equals(a.GetProperty("name").GetString(), "PodBridge.exe", StringComparison.OrdinalIgnoreCase))
-                    {
-                        exe = a.GetProperty("browser_download_url").GetString();
-                        size = a.TryGetProperty("size", out var sz) ? sz.GetInt64() : 0;
-                    }
-            return new ReleaseInfo(v, tag, page ?? ReleasesPage, exe, size);
+                {
+                    var name = a.GetProperty("name").GetString();
+                    var url = a.GetProperty("browser_download_url").GetString();
+                    long size = a.TryGetProperty("size", out var sz) ? sz.GetInt64() : 0;
+                    if (string.Equals(name, "PodBridge.exe", StringComparison.OrdinalIgnoreCase)) (exe, exeSize) = (url, size);
+                    else if (string.Equals(name, "PodBridge.zip", StringComparison.OrdinalIgnoreCase)) (zip, zipSize) = (url, size);
+                }
+            return new ReleaseInfo(v, tag, page ?? ReleasesPage, exe, exeSize) { ZipUrl = zip, ZipSize = zipSize };
         }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException)
         {

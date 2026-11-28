@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Net.Http;
 using PodBridge.Core.Updates;
 
@@ -33,26 +34,48 @@ internal static class Updater
         return ReleaseInfo.Parse(json);
     }
 
-    /// <summary>Downloads the release exe next to PodBridge's log folder and checks its size.</summary>
+    /// <summary>
+    /// Downloads the release next to PodBridge's log folder, checks its size and returns the exe.
+    /// Prefers the zipped exe (less than half the download), falls back to the plain exe.
+    /// </summary>
     public static async Task<string> DownloadAsync(ReleaseInfo r)
     {
-        if (r.ExeUrl is null) throw new InvalidOperationException("This release has no PodBridge.exe attached.");
+        if (!r.HasDownload) throw new InvalidOperationException("This release has no PodBridge.exe attached.");
         Directory.CreateDirectory(UpdateDir);
-        var path = Path.Combine(UpdateDir, $"PodBridge-{r.Version.ToString(3)}.exe");
-        using (var response = await Http.GetAsync(r.ExeUrl, HttpCompletionOption.ResponseHeadersRead))
+        var exePath = Path.Combine(UpdateDir, $"PodBridge-{r.Version.ToString(3)}.exe");
+        if (r.ZipUrl is not null)
+        {
+            var zipPath = Path.ChangeExtension(exePath, ".zip");
+            await DownloadFileAsync(r.ZipUrl, zipPath, r.ZipSize);
+            try
+            {
+                using var zip = ZipFile.OpenRead(zipPath);
+                var entry = zip.Entries.FirstOrDefault(e => e.Name.Equals("PodBridge.exe", StringComparison.OrdinalIgnoreCase))
+                    ?? throw new IOException("The update zip has no PodBridge.exe in it.");
+                entry.ExtractToFile(exePath, overwrite: true);
+                if (new FileInfo(exePath).Length != entry.Length) throw new IOException("Unzipping the update failed.");
+            }
+            finally { File.Delete(zipPath); }
+        }
+        else await DownloadFileAsync(r.ExeUrl!, exePath, r.ExeSize);
+        Log.Write($"Downloaded update {r.Tag} ({new FileInfo(exePath).Length} bytes)");
+        return exePath;
+    }
+
+    private static async Task DownloadFileAsync(string url, string path, long expectedSize)
+    {
+        using (var response = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead))
         {
             response.EnsureSuccessStatusCode();
             await using var file = File.Create(path);
             await response.Content.CopyToAsync(file);
         }
         var size = new FileInfo(path).Length;
-        if (size < 1_000_000 || (r.ExeSize > 0 && size != r.ExeSize))
+        if (size < 1_000_000 || (expectedSize > 0 && size != expectedSize))
         {
             File.Delete(path);
-            throw new IOException($"Download incomplete ({size} of {r.ExeSize} bytes).");
+            throw new IOException($"Download incomplete ({size} of {expectedSize} bytes).");
         }
-        Log.Write($"Downloaded update {r.Tag} ({size} bytes)");
-        return path;
     }
 
     /// <summary>Starts the downloaded exe in "apply update" mode. The caller then exits.</summary>
@@ -82,7 +105,7 @@ internal static class Updater
         try
         {
             if (!Directory.Exists(UpdateDir)) return;
-            foreach (var f in Directory.GetFiles(UpdateDir, "*.exe"))
+            foreach (var f in Directory.GetFiles(UpdateDir, "*.exe").Concat(Directory.GetFiles(UpdateDir, "*.zip")))
                 if (!string.Equals(f, Environment.ProcessPath, StringComparison.OrdinalIgnoreCase))
                     try { File.Delete(f); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         }
