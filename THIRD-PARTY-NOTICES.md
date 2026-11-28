@@ -7,9 +7,10 @@
 - License: Creative Commons Attribution 4.0 International (CC BY 4.0),
   http://creativecommons.org/licenses/by/4.0/
 - File: `assets/3d/airpods_4.glb` (unmodified)
-- Changes: rendered to still images for PodBridge's artwork
-  (`src/PodBridge.App/Assets/airpods-hero.png`) with our own camera, lighting and cropping. The same
-  artwork is used for every AirPods model.
+- Changes: rendered to images for PodBridge's artwork (`src/PodBridge.App/Assets/airpods-hero.png`
+  and the case-open animation in `src/PodBridge.App/Assets/anim/`) with our own camera, lighting,
+  cropping and animation (lid rotated about the model's hinge, buds moved). The model file itself
+  is unmodified. The same artwork is used for every AirPods model.
 
 The model depicts an Apple product. AirPods is a trademark of Apple Inc. PodBridge is not
 affiliated with or endorsed by Apple.

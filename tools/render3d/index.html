@@ -34,21 +34,50 @@ const radius = size.length() / 2;
 root.updateMatrixWorld(true);
 const byName = n => root.getObjectByName(n);
 const lid = byName('nJoEOlgGwcdXBHJ'), body = byName('iqLXttIronNPiXb');
-const buds = byName('KUMoISNnaiVmGqL') ? [byName('NwGGgfiOhfXuluV')] : [];
 const bodyBox = new THREE.Box3().setFromObject(body);
 // Hinge: along X at the top-back edge of the body (back = -Z, away from the default camera).
-const hinge = new THREE.Vector3(0, bodyBox.max.y, bodyBox.min.z);
-const lidDeg = +(q.get('lid') || 0);
-if (lidDeg) {
-  const pivot = new THREE.Object3D(); pivot.position.copy(hinge); root.add(pivot); pivot.updateMatrixWorld(true);
-  for (const part of [lid, byName('rXHaxBciRFTeNPF')]) if (part) pivot.attach(part);
-  pivot.rotation.x = lidDeg * Math.PI / 180;
+// Hinge: the model's own hinge part. Its centre is the pivot, the pin runs along X.
+const hingePart = byName('rXHaxBciRFTeNPF');
+const hinge = new THREE.Box3().setFromObject(hingePart).getCenter(new THREE.Vector3());
+// hinge is in world space; the pivot lives inside the (re-centred) root, so convert.
+const pivot = new THREE.Object3D(); pivot.position.copy(root.worldToLocal(hinge.clone())); root.add(pivot); pivot.updateMatrixWorld(true);
+pivot.attach(lid);
+const lidBoxAt = deg => { pivot.rotation.x = deg * Math.PI / 180; pivot.updateMatrixWorld(true); return new THREE.Box3().setFromObject(lid); };
+// Closed = the FLATTEST lid position (smallest height) that sits on top of the body's footprint.
+// (The lid's rim wraps slightly down over the body when shut, so "never below the top" is wrong.)
+const bodyC = bodyBox.getCenter(new THREE.Vector3()), bodyDepth = bodyBox.max.z - bodyBox.min.z;
+let closedDeg = 0, best = Infinity;
+for (let d = -180; d <= 180; d += 0.5) {
+  const b = lidBoxAt(d), c = b.getCenter(new THREE.Vector3());
+  const onTop = c.y > bodyBox.max.y - size.y * 0.05 && Math.abs(c.z - bodyC.z) < bodyDepth * 0.25;
+  const score = (b.max.y - b.min.y) + (onTop ? 0 : 1);
+  if (score < best) { best = score; closedDeg = d; }
 }
-const budsDy = +(q.get('budsDy') || 0), budsOpacity = q.get('budsOpacity');
-for (const b of buds) {
-  b.position.y += budsDy * size.y;
-  if (budsOpacity !== null) b.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = +budsOpacity; } });
+const table = [];
+for (let d = -180; d <= 180; d += 15) { const b = lidBoxAt(d); table.push([d, ...b.min.toArray(), ...b.max.toArray()].map(v => +(+v).toFixed(4))); }
+window.__table = table;
+// lidT: 0 = closed, 1 = as modelled (open). Or 'lid' = explicit degrees.
+const lidT = q.get('lidT');
+pivot.rotation.x = (lidT !== null ? closedDeg * (1 - +lidT) : +(q.get('lid') || 0)) * Math.PI / 180;
+pivot.updateMatrixWorld(true);
+window.__hinge = { closedDeg, hinge: hinge.toArray().map(v => +v.toFixed(4)), body: [bodyBox.min.toArray(), bodyBox.max.toArray()].map(a => a.map(v => +v.toFixed(4))) };
+// Buds: budsT 0 = down in the case's slots (hidden), 1 = floating as modelled.
+// Start over the slots (body centre in X/Z), tops at the rim; everything below the rim is clipped,
+// so the buds appear to rise out of the case. No clipping at budsT = 1 (frame = hero image).
+const budsNode = byName('NwGGgfiOhfXuluV');
+const budsBox = new THREE.Box3().setFromObject(budsNode);
+const budsC = budsBox.getCenter(new THREE.Vector3()), bodyCtr = bodyBox.getCenter(new THREE.Vector3());
+const rimY = bodyBox.max.y;
+const seated = new THREE.Vector3(bodyCtr.x - budsC.x, -(budsBox.max.y - rimY), bodyCtr.z - budsC.z);
+const mover = new THREE.Object3D(); root.add(mover); mover.updateMatrixWorld(true); mover.attach(budsNode);
+const budsT = q.get('budsT') !== null ? +q.get('budsT') : 1;
+mover.position.copy(seated).multiplyScalar(1 - budsT);
+if (budsT < 1) {
+  renderer.localClippingEnabled = true;
+  const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -rimY);
+  budsNode.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.clippingPlanes = [plane]; } });
 }
+
 const cam = new THREE.PerspectiveCamera(30, W / H, radius / 100, radius * 100);
 const az = +(q.get('az') || 35) * Math.PI / 180, el = +(q.get('el') || 22) * Math.PI / 180;
 const dist = radius / Math.sin(cam.fov * Math.PI / 360) * 1.05;
@@ -67,6 +96,6 @@ floor.rotation.x = -Math.PI / 2; floor.position.y = -size.y / 2 - radius * 0.002
 scene.add(floor);
 
 renderer.render(scene, cam);
-window.__info = { size: size.toArray().map(v => +v.toFixed(4)), meshes: (() => { let n = 0; root.traverse(o => o.isMesh && n++); return n; })() };
+window.__info = { table: window.__table, hinge: window.__hinge, size: size.toArray().map(v => +v.toFixed(4)), meshes: (() => { let n = 0; root.traverse(o => o.isMesh && n++); return n; })() };
 window.__done = true;
 </script></body></html>

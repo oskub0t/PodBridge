@@ -14,7 +14,25 @@ Then crop to content and scale to 520 px tall (see the commit that added this fo
 
 Page parameters: `az`/`el` camera angles (degrees), `w`/`h` size, `exp` exposure, `env` reflection
 strength, `key` key light, `shadow` floor shadow opacity, `hide` comma-separated node names,
-`lid` lid rotation in degrees around the hinge (positive closes), `budsDy`/`budsOpacity`.
+`lidT` lid open amount (0 = closed, 1 = as modelled; the closed angle is solved from the model's
+hinge part), `budsT` buds (0 = down in the case's slots, clipped at the rim, 1 = floating).
+
+## Case-open animation (src/PodBridge.App/Assets/anim)
+
+30 frames at 30 fps, 1200×1050 each, then cropped to one shared box and scaled to 300 px tall:
+
+```python
+def clamp(x): return max(0.0, min(1.0, x))
+def in_out_cubic(x): return 4*x*x*x if x < 0.5 else 1 - (-2*x + 2)**3 / 2
+def out_cubic(x): return 1 - (1 - x)**3
+for i in range(30):
+    t = i / 29
+    lid  = in_out_cubic(clamp(t / 0.45))          # lid opens over the first 0.45 s
+    buds = out_cubic(clamp((t - 0.3) / 0.7))      # buds rise from 0.3 s and settle
+    print(f"frames/f{i:02d}.png", f"lidT={lid:.4f}&budsT={buds:.4f}&w=1200&h=1050&az=32&el=18")
+```
+
+The Settings still (`airpods-hero.png`, 520 px tall) is the last frame with the same crop.
 
 Model parts: case body `iqLXttIronNPiXb`, lid `nJoEOlgGwcdXBHJ`, hinge `rXHaxBciRFTeNPF`,
 buds `NwGGgfiOhfXuluV`.
