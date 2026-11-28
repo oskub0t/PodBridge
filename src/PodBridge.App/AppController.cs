@@ -100,6 +100,8 @@ internal sealed class AppController : IDisposable
     private readonly HashSet<ushort> _rejected = [];
 
     private ConnectCard? _card;
+    private DateTimeOffset? _myModelLastHeard;  // any signal strength: for "heard again after N s"
+    private DateTimeOffset? _caseOpenedAdvertAt; // advert that opened the case: times the card
     private StatusPanel? _panel;
     private SettingsWindow? _settings;
     private DateTimeOffset _panelClosedAt;
@@ -134,6 +136,7 @@ internal sealed class AppController : IDisposable
         _presence.Appeared += s =>
         {
             _earMerger.Reset(); // back after an absence: old in-ear state no longer applies
+            EarLog($"AIRPODS BACK after an absence → showing card", s.Timestamp);
             OnCaseOpened(s);
         };
         _presence.Updated += s =>
@@ -197,6 +200,15 @@ internal sealed class AppController : IDisposable
 
     private void OnAdvertisement(AirPodsStatus s)
     {
+        if (s.ModelId == _cfg.MyModelId)
+        {
+            // Where does the time go after the case lay closed? First advert after a silence,
+            // at any signal, and whether it was strong enough to count as yours.
+            if (_myModelLastHeard is { } last && s.Timestamp - last > TimeSpan.FromSeconds(10))
+                EarLog($"heard again after {(s.Timestamp - last).TotalSeconds:0} s of silence, {s.Rssi} dBm" +
+                       (s.Rssi < _cfg.MinRssi ? $" (below {_cfg.MinRssi}: not counted yet)" : ""), s.Timestamp);
+            _myModelLastHeard = s.Timestamp;
+        }
         if (s.ModelId == _cardCaseModel) _lidCadence.Observe(s.Timestamp);
         HandleLid(s);
         if (s.Rssi >= -85)
@@ -254,6 +266,7 @@ internal sealed class AppController : IDisposable
     private void OnCaseOpened(AirPodsStatus s)
     {
         _autoConnect.ResetBaseline(); // the reading right after the lid opens is a baseline, not "went in"
+        _caseOpenedAdvertAt = s.Timestamp;
         Log.Write($"Case opened: L{s.LeftPercent} R{s.RightPercent} C{s.CasePercent} rssi {s.Rssi}");
         UpdateConnection();
 
@@ -305,6 +318,12 @@ internal sealed class AppController : IDisposable
         var card = new ConnectCard();
         card.Closed += (_, _) => { if (_card == card) _card = null; };
         _card = card;
+        if (caseModel is not null && _caseOpenedAdvertAt is { } advertAt)
+        {
+            _caseOpenedAdvertAt = null;
+            card.ContentRendered += (_, _) =>
+                EarLog($"card on screen {(DateTimeOffset.Now - advertAt).TotalMilliseconds:0} ms after that advert");
+        }
         card.Show(title, battery, state, detail);
         return card;
     }

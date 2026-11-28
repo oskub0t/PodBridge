@@ -132,6 +132,10 @@ Field captures are kept as unit tests (`FeatureTests.cs`, `LidAndConnectTests.cs
    and memory OK, one opening without a card (weak-signal advert fed the lid tracker; fixed in
    0.4.9). Still to test on 0.4.9: case card now translucent (Acrylic kept while unfocused via
    WM_NCACTIVATE), tray icon, uninstall dialog. Then publish v0.4.9.
+   Open question: the first opening after the case lay closed ~1.5 min felt very slow, repeated
+   openings are instant. That card comes from the "AirPods back after an absence" path. 0.4.9's
+   timeline logs the silence, the first advert's signal (and whether it was below MinRssi) and
+   how long the card took to reach the screen: read those before changing anything.
 2. **Memory**: 0.4.6 reported 460 MB working set, 268 MB private, only 6 MB .NET heap, GPU tier 2.
    0.4.8 (uncompressed, no WinForms) measured: **302 MB WS / 186 MB private** (−34 % / −31 %),
    CPU 1.3 % while flipping the lid. Still loaded but probably avoidable: System.Drawing.Common,
