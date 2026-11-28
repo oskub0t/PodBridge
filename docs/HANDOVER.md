@@ -1,6 +1,6 @@
 # PodBridge handover
 
-State as of **28 Nov 2026, version 0.4.5** (`main`). Read this first when picking the project up.
+State as of **28 Nov 2026, version 0.4.6** (`main`). Read this first when picking the project up.
 `CLAUDE.md` has the short version of the working rules.
 
 ## What it is
@@ -16,7 +16,7 @@ https://github.com/oskub0t/PodBridge
 |---|---|---|
 | Recognise *your* AirPods, ignore others | BLE proximity-pairing adverts, learned model ID + RSSI | confirmed |
 | L / R / case battery (10 % steps), last known values with age | advert bytes; `BatteryMemory` persisted to `%LOCALAPPDATA%\PodBridge\battery.json` | confirmed |
-| Case-open card + "lid opens, buds rise" animation | lid byte (see below), 60 pre-rendered frames | 0.4.5 not yet tested |
+| Case-open card + "lid opens, buds rise" animation | lid byte (see below), 60 pre-rendered frames | 0.4.6 not yet tested (buds now rise while the lid opens) |
 | Card closes the instant the lid closes | lid byte bit 0x08 | confirmed (0.3.8+) |
 | Auto-connect when a bud goes in (or case opens / never) | KS one-shot reconnect via Core Audio | confirmed |
 | Sound follows your ears (stays on speakers while in case) | default endpoint switching (`IPolicyConfig`) | confirmed |
@@ -92,7 +92,7 @@ Field captures are kept as unit tests (`FeatureTests.cs`, `LidAndConnectTests.cs
   2. the owner publishes a Release on github.com with tag `vX.Y.Z` (target `main`);
   3. `.github/workflows/build.yml` (on `release: published`) builds on Windows, tests, and attaches
      `PodBridge.exe`; installed copies get an update notification within a day.
-- Latest published Release: **v0.4.1**. 0.4.2–0.4.5 are on `main` only (owner publishes when ready).
+- Latest published Release: **v0.4.1**. 0.4.2–0.4.6 are on `main` only (owner publishes when ready).
 - `driver.yml` builds the driver on `windows-2022` (compiles cleanly at /W4 /WX; InfVerif fails to
   load on the runner, so the INF is unchecked). Node 20 deprecation warning on actions (harmless).
 - Claude Code cloud sessions: branch pushes work; **tag pushes and release creation are refused
@@ -115,8 +115,8 @@ Field captures are kept as unit tests (`FeatureTests.cs`, `LidAndConnectTests.cs
 
 ## Open work / next steps
 
-1. **Owner to test 0.4.5**: animation on every lid opening and smoothness (60 frames, pre-decoded,
-   starts on render). Then publish v0.4.5.
+1. **Owner to test 0.4.6**: animation on every lid opening and smoothness (60 frames, pre-decoded,
+   starts on render). Then publish v0.4.6. (0.4.6 = 0.4.5 with the buds starting at 0.2 s instead of 0.35 s, so there is no pause between lid and buds.)
 2. **Memory**: 427 MB working set reported on 0.4.4. Diagnostics now show private bytes, .NET heap
    and WPF graphics tier; check those before changing anything (candidates: card windows not
    released, WPF software rendering, GC settings).

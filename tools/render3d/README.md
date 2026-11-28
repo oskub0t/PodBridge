@@ -26,13 +26,29 @@ box and scaled to 300 px tall (about 2 MB in total):
 ```python
 def clamp(x): return max(0.0, min(1.0, x))
 def in_out_cubic(x): return 4*x*x*x if x < 0.5 else 1 - (-2*x + 2)**3 / 2
-def out_cubic(x): return 1 - (1 - x)**3
+def bezier(x1, y1, x2, y2):                      # CSS-style cubic-bezier easing
+    def f(x):
+        lo, hi = 0.0, 1.0
+        for _ in range(60):
+            s = (lo + hi) / 2
+            bx = 3*(1-s)**2*s*x1 + 3*(1-s)*s*s*x2 + s**3
+            lo, hi = (s, hi) if bx < x else (lo, s)
+        s = (lo + hi) / 2
+        return 3*(1-s)**2*s*y1 + 3*(1-s)*s*s*y2 + s**3
+    return f
+rise = bezier(0.2, 0.3, 0.1, 1.0)                 # soft start, long settle
 for i in range(60):
     t = i / 59
     lid  = in_out_cubic(clamp(t / 0.45))          # lid opens over the first 0.45 s
-    buds = out_cubic(clamp((t - 0.35) / 0.65))    # seated buds visible as the lid opens, rise from 0.35 s
+    buds = rise(clamp((t - 0.20) / 0.80))         # buds start rising with the lid about half open
     print(f"frames/f{i:02d}.png", f"lidT={lid:.4f}&budsT={buds:.4f}&w=1200&h=1050&az=32&el=18")
 ```
+
+The buds overlap the lid on purpose: starting them only once the lid had settled (0.4.5 started
+at 0.35 s, after the lid's ease-out) read as "case, pause, buds".
+
+Crop: the union of every frame's non-transparent pixels, plus 30 px on each side (at 1200×1050),
+then Lanczos-scaled to 300 px tall.
 
 The Settings still (`airpods-hero.png`, 520 px tall) is the last frame with the same crop.
 
