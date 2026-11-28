@@ -15,7 +15,8 @@ Then crop to content and scale to 520 px tall (see the commit that added this fo
 Page parameters: `az`/`el` camera angles (degrees), `w`/`h` size, `exp` exposure, `env` reflection
 strength, `key` key light, `shadow` floor shadow opacity, `hide` comma-separated node names,
 `lidT` lid open amount (0 = closed, 1 = as modelled; the closed angle is solved from the model's
-hinge part), `budsT` buds (0 = down in the case's slots, clipped at the rim, 1 = floating).
+hinge part), `budsT` buds (0 = seated in the case with their heads above the rim, everything below the rim
+clipped; 1 = floating), `seat` how much of the buds shows above the rim when seated (default 0.33).
 
 ## Case-open animation (src/PodBridge.App/Assets/anim)
 
@@ -28,7 +29,7 @@ def out_cubic(x): return 1 - (1 - x)**3
 for i in range(30):
     t = i / 29
     lid  = in_out_cubic(clamp(t / 0.45))          # lid opens over the first 0.45 s
-    buds = out_cubic(clamp((t - 0.3) / 0.7))      # buds rise from 0.3 s and settle
+    buds = out_cubic(clamp((t - 0.35) / 0.65))    # seated buds visible as the lid opens, rise from 0.35 s
     print(f"frames/f{i:02d}.png", f"lidT={lid:.4f}&budsT={buds:.4f}&w=1200&h=1050&az=32&el=18")
 ```
 

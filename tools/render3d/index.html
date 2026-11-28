@@ -68,7 +68,10 @@ const budsNode = byName('NwGGgfiOhfXuluV');
 const budsBox = new THREE.Box3().setFromObject(budsNode);
 const budsC = budsBox.getCenter(new THREE.Vector3()), bodyCtr = bodyBox.getCenter(new THREE.Vector3());
 const rimY = bodyBox.max.y;
-const seated = new THREE.Vector3(bodyCtr.x - budsC.x, -(budsBox.max.y - rimY), bodyCtr.z - budsC.z);
+// Seated like real AirPods: stems in the case, heads above the rim (in the lid's hollows), so the
+// case isn't empty when the lid opens. 'seat' = fraction of the buds' height above the rim.
+const seatAbove = (budsBox.max.y - budsBox.min.y) * +(q.get('seat') || 0.33);
+const seated = new THREE.Vector3(bodyCtr.x - budsC.x, -(budsBox.max.y - rimY) + seatAbove, bodyCtr.z - budsC.z);
 const mover = new THREE.Object3D(); root.add(mover); mover.updateMatrixWorld(true); mover.attach(budsNode);
 const budsT = q.get('budsT') !== null ? +q.get('budsT') : 1;
 mover.position.copy(seated).multiplyScalar(1 - budsT);
