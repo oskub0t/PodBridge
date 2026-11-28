@@ -1,6 +1,6 @@
 # PodBridge handover
 
-State as of **28 Nov 2026, version 0.4.6** (`main`). Read this first when picking the project up.
+State as of **28 Nov 2026, version 0.4.7** (`main`). Read this first when picking the project up.
 `CLAUDE.md` has the short version of the working rules.
 
 ## What it is
@@ -16,7 +16,7 @@ https://github.com/oskub0t/PodBridge
 |---|---|---|
 | Recognise *your* AirPods, ignore others | BLE proximity-pairing adverts, learned model ID + RSSI | confirmed |
 | L / R / case battery (10 % steps), last known values with age | advert bytes; `BatteryMemory` persisted to `%LOCALAPPDATA%\PodBridge\battery.json` | confirmed |
-| Case-open card + "lid opens, buds rise" animation | lid byte (see below), 60 pre-rendered frames | 0.4.6 not yet tested (buds now rise while the lid opens) |
+| Case-open card + "lid opens, buds rise" animation | lid byte (see below), 60 pre-rendered frames | animation OK on 0.4.6; 0.4.7 lid tracker not yet tested |
 | Card closes the instant the lid closes | lid byte bit 0x08 | confirmed (0.3.8+) |
 | Auto-connect when a bud goes in (or case opens / never) | KS one-shot reconnect via Core Audio | confirmed |
 | Sound follows your ears (stays on speakers while in case) | default endpoint switching (`IPolicyConfig`) | confirmed |
@@ -74,8 +74,13 @@ Apple manufacturer data, type `0x07`, plain variant only (prefix `0x01`, 25 byte
   differently → `EarStateMerger` lets an in-case/charging pod speak only for itself. Both pods
   advertise alternately.
 - **Lid byte** (payload byte 6): `0x08` = lid closed, `0x20` = advertiser is in the case (pods out
-  of the case send `0x1x`, ignore for lid), `0x07` = counter of openings (wraps 7→0). One pod often
-  reports late; `LidTracker` follows the counter (newer = new opening, older = ignore).
+  of the case send `0x1x`, ignore for lid), `0x07` = a counter that changes per opening (wraps 7→0).
+  One pod often lags behind the other by a second or more. The two pods' counters are **not** in
+  sync (0.4.6 log: left #1 while right #2; left went 3 → 1 with the case closed), so 0.4.5's
+  cross-pod counter ordering dropped real openings (no card for ~25 s). Since 0.4.7 `LidTracker`
+  follows each pod on its own and uses the counter only to spot the other pod's late reports
+  within a 3 s grace; it errs towards showing a card. The diagnostics timeline now shows its
+  decisions (`LID OPENED → showing card`, `lid report ignored: …`).
 - **Cadence**: ~127–375 ms with lid open, ~750 ms worn, keeps advertising ~4 s after lid close.
 - Windows does **not** report a battery level for these AirPods (HFP battery property empty).
 - Windows creates an "AAP Server" device node (`BTHENUM\{74ec2172-0bad-4d01-8f77-997b2be0722a}_VID&0001004c_PID&2027`) with no driver.
@@ -92,7 +97,7 @@ Field captures are kept as unit tests (`FeatureTests.cs`, `LidAndConnectTests.cs
   2. the owner publishes a Release on github.com with tag `vX.Y.Z` (target `main`);
   3. `.github/workflows/build.yml` (on `release: published`) builds on Windows, tests, and attaches
      `PodBridge.exe`; installed copies get an update notification within a day.
-- Latest published Release: **v0.4.1**. 0.4.2–0.4.6 are on `main` only (owner publishes when ready).
+- Latest published Release: **v0.4.1**. 0.4.2–0.4.7 are on `main` only (owner publishes when ready).
 - `driver.yml` builds the driver on `windows-2022` (compiles cleanly at /W4 /WX; InfVerif fails to
   load on the runner, so the INF is unchecked). Node 20 deprecation warning on actions (harmless).
 - Claude Code cloud sessions: branch pushes work; **tag pushes and release creation are refused
@@ -115,11 +120,16 @@ Field captures are kept as unit tests (`FeatureTests.cs`, `LidAndConnectTests.cs
 
 ## Open work / next steps
 
-1. **Owner to test 0.4.6**: animation on every lid opening and smoothness (60 frames, pre-decoded,
-   starts on render). Then publish v0.4.6. (0.4.6 = 0.4.5 with the buds starting at 0.2 s instead of 0.35 s, so there is no pause between lid and buds.)
-2. **Memory**: 427 MB working set reported on 0.4.4. Diagnostics now show private bytes, .NET heap
-   and WPF graphics tier; check those before changing anything (candidates: card windows not
-   released, WPF software rendering, GC settings).
+1. **Owner to test 0.4.7**: a card on every lid opening, including fast open/close and after the
+   case lay closed for a while (animation itself confirmed OK on 0.4.6). Then publish v0.4.7.
+2. **Memory**: 0.4.6 reported 460 MB working set, 268 MB private, only 6 MB .NET heap, GPU tier 2.
+   So it's not our data. Main suspect: `EnableCompressionInSingleFile` unpacks every loaded
+   assembly into private memory (the app's managed assemblies total 174 MB uncompressed:
+   Windows SDK projection 24 MB, CoreLib 15, PresentationFramework 15, WinForms 13 …). CI now
+   also uploads an uncompressed exe (`PodBridge-win-x64-uncompressed` artifact on pushes) for an
+   A/B comparison. It is ~192 MB, over GitHub's 100 MB file limit, so it can't go in `release/`;
+   switching would mean shipping it via Releases only. Diagnostics list the loaded assemblies
+   (0.4.7+). Smaller lever: drop WinForms (only used for the tray icon).
 3. **Notifications show "off"** on the owner's PC; verify in Windows Settings → Notifications.
 4. **Split `AppController`** (connection, ears/lid, cards, calls, updates, diagnostics).
 5. Ideas not started: presentation clicker (stem presses via media session → arrow keys; needs a

@@ -322,17 +322,27 @@ internal sealed class AppController : IDisposable
         // After an absence the "case appeared" path shows the card; start this tracker fresh.
         if (mine && _presence.IsStale(s.Timestamp)) lid.Reset();
 
-        switch (lid.Observe(s))
+        var ev = lid.Observe(s);
+        if (mine && lid.LastIgnored is string why) EarLog($"lid report ignored: {why}", s.Timestamp);
+        switch (ev)
         {
             case LidEvent.Closed when _card is { IsVisible: true } card && _cardCaseModel == s.ModelId:
                 Log.Write("Lid closed: dismissing card");
+                if (mine) EarLog("LID CLOSED → card dismissed", s.Timestamp);
                 _lidTimer.Stop();
                 _cardCaseModel = null;
                 card.Dismiss();
                 break;
+            case LidEvent.Closed when mine:
+                EarLog("LID CLOSED (no card open)", s.Timestamp);
+                break;
             case LidEvent.Opened when mine && s.InEarCount == 0:
                 Log.Write("Lid opened");
+                EarLog("LID OPENED → showing card", s.Timestamp);
                 OnCaseOpened(s);
+                break;
+            case LidEvent.Opened when mine:
+                EarLog($"LID OPENED, no card ({s.InEarCount} in ear)", s.Timestamp);
                 break;
         }
     }
@@ -520,7 +530,7 @@ internal sealed class AppController : IDisposable
     {
         var entry = $"{(at ?? DateTimeOffset.Now).LocalDateTime:HH:mm:ss}  {text}";
         _earLog.Enqueue(entry);
-        while (_earLog.Count > 40) _earLog.Dequeue();
+        while (_earLog.Count > 80) _earLog.Dequeue();
         Log.Write("Ears: " + entry);
     }
 
@@ -893,7 +903,10 @@ internal sealed class AppController : IDisposable
             $"{(counts.Apple - _perfCounts.Apple) / secs:0.0}/s Apple, " +
             $"{(counts.Parsed - _perfCounts.Parsed) / secs:0.0}/s AirPods status\n" +
             $"  Your AirPods heard {(mine > 0 ? $"every ~{secs * 1000 / mine:0} ms" : "not at all")} in that minute\n" +
-            $"  Mic check: {(_micWatcher is null ? "polling every second" : "on change (+ every 30 s)")}";
+            $"  Mic check: {(_micWatcher is null ? "polling every second" : "on change (+ every 30 s)")}\n" +
+            // In a compressed single-file exe every loaded assembly is unpacked into private memory,
+            // so this list tells how much of "private" is code rather than data.
+            $"  Assemblies loaded: {string.Join(", ", AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetName().Name).Order())}";
         _perfAt = now;
         _perfCpu = cpu;
         _perfCounts = counts;

@@ -82,24 +82,89 @@ public class LidTrackerTests
                              LidEvent.None, LidEvent.None, LidEvent.Opened }, events);
     }
 
+    private static AirPodsStatus Pod(char pod, int lid, DateTimeOffset at) =>
+        new(0x2720, 80, 80, 60, true, true, false, false, false, -43, at)
+        { RawStatus = (byte)(pod == 'L' ? 0x35 : 0x55), RawLid = (byte)lid };
+
     [Fact]
     public void Late_reports_from_the_other_pod_are_ignored()
     {
-        // The 0.4.4 field log (12.10.37–12.11.21), in-case adverts only, both pods interleaved.
-        // Old behaviour: 0x37 (opening #7) showed the card, then the left pod's late 0x3E (closed,
-        // opening #6) dismissed it straight away.
+        // The 0.4.4 field log (12.10.37–12.11.21), in-case adverts only, both pods interleaved
+        // (about 2 s apart). Old behaviour: the right pod's 0x37 (opening #7) showed the card, then
+        // the left pod's late 0x3E (closed, opening #6) dismissed it straight away.
         var t = new LidTracker();
-        AirPodsStatus L(int lid) => new(0x2720, 80, 80, 60, true, true, false, false, false, -43,
-            DateTimeOffset.UnixEpoch) { RawLid = (byte)lid };
-        int[] log = [0x31, 0x31, 0x31, 0x39, 0x32, 0x32, 0x3A, 0x33, 0x3B, 0x34, 0x3C, 0x35, 0x3D, 0x36,
-                     0x3E, 0x37, 0x3E, 0x37, 0x3F, 0x30, 0x38, 0x31, 0x39];
-        var events = log.Select(x => t.Observe(L(x))).Where(e => e != LidEvent.None).ToList();
+        var t0 = new DateTimeOffset(2026, 11, 28, 12, 10, 37, TimeSpan.Zero);
+        (char, int)[] log = [('R', 0x31), ('L', 0x31), ('R', 0x31), ('L', 0x39), ('R', 0x32), ('L', 0x32),
+            ('R', 0x3A), ('L', 0x33), ('R', 0x3B), ('L', 0x34), ('R', 0x3C), ('L', 0x35), ('R', 0x3D),
+            ('L', 0x36), ('R', 0x3E), ('R', 0x37), ('L', 0x3E), ('L', 0x37), ('R', 0x3F), ('L', 0x30),
+            ('R', 0x38), ('L', 0x31), ('R', 0x39)];
+        var events = log.Select((x, i) => t.Observe(Pod(x.Item1, x.Item2, t0.AddSeconds(i * 1.9))))
+            .ToList();
 
-        // Strictly alternating, one Opened per real opening (#2 … #7, #0, #1), no flicker.
-        Assert.Equal(17, events.Count);
-        Assert.Equal(LidEvent.Closed, events[0]);
-        for (int i = 1; i < events.Count; i++) Assert.NotEqual(events[i - 1], events[i]);
-        Assert.Equal(8, events.Count(e => e == LidEvent.Opened));
+        Assert.Equal(LidEvent.Opened, events[15]); // right pod: opening #7
+        Assert.Equal(LidEvent.None, events[16]);   // left pod's late 'closed' from #6: ignored
+        var real = events.Where(e => e != LidEvent.None).ToList();
+        Assert.Equal(LidEvent.Closed, real[0]);
+        for (int i = 1; i < real.Count; i++) Assert.NotEqual(real[i - 1], real[i]);
+        Assert.Equal(8, real.Count(e => e == LidEvent.Opened)); // #2 … #7, #0, #1
+    }
+
+    [Fact]
+    public void Pods_with_different_counters_still_show_every_opening()
+    {
+        // The 0.4.6 field log (13.28.03–13.29.03), lid flipped repeatedly. The pods' counters
+        // disagree (left says #1 while right says #2) and the left one went 3 → 1 while the case
+        // lay closed. 0.4.5 ordered reports by counter across pods and ignored everything from
+        // 13.28.27 to 13.28.51, including the opening at 13.28.44 after 12 s closed: no card.
+        (string at, char pod, int lid)[] log =
+        [
+            ("13.28.04", 'L', 0x33), ("13.28.05", 'L', 0x3B), ("13.28.06", 'L', 0x34), ("13.28.08", 'R', 0x3A),
+            ("13.28.09", 'R', 0x33), ("13.28.12", 'R', 0x3B), ("13.28.12", 'R', 0x34), ("13.28.15", 'R', 0x3C),
+            ("13.28.17", 'L', 0x37), ("13.28.18", 'L', 0x3F), ("13.28.19", 'R', 0x36), ("13.28.21", 'L', 0x38),
+            ("13.28.22", 'R', 0x37), ("13.28.24", 'L', 0x39), ("13.28.25", 'L', 0x32), ("13.28.26", 'L', 0x3A),
+            ("13.28.27", 'R', 0x31), ("13.28.30", 'L', 0x3B), ("13.28.30", 'R', 0x32), ("13.28.32", 'R', 0x3A),
+            ("13.28.44", 'L', 0x31), ("13.28.48", 'L', 0x39), ("13.28.48", 'R', 0x32), ("13.28.48", 'L', 0x39),
+            ("13.28.49", 'R', 0x32), ("13.28.51", 'R', 0x3A), ("13.28.51", 'R', 0x33), ("13.28.54", 'L', 0x3B),
+            ("13.28.55", 'R', 0x34), ("13.28.59", 'R', 0x3C), ("13.29.00", 'R', 0x35), ("13.29.03", 'R', 0x3D),
+        ];
+        var t = new LidTracker();
+        var events = log.Select((x, i) =>
+        {
+            var p = x.at.Split('.').Select(int.Parse).ToArray();
+            var at = new DateTimeOffset(2026, 11, 28, p[0], p[1], p[2], TimeSpan.Zero).AddMilliseconds(i * 10);
+            return (x.at, e: t.Observe(Pod(x.pod, x.lid, at)));
+        }).Where(x => x.e != LidEvent.None).ToList();
+
+        Assert.Contains(("13.28.44", LidEvent.Opened), events); // the opening 0.4.5 missed
+        Assert.Contains(("13.28.55", LidEvent.Opened), events);
+        Assert.Contains(("13.29.03", LidEvent.Closed), events);
+        for (int i = 1; i < events.Count; i++) Assert.NotEqual(events[i - 1].e, events[i].e);
+        // Keeps following the flips instead of going deaf (0.4.5 reported 9 events here).
+        Assert.True(events.Count >= 12, string.Join(", ", events));
+    }
+
+    [Fact]
+    public void Late_open_from_the_other_pod_does_not_reopen_the_card()
+    {
+        var t = new LidTracker();
+        var t0 = DateTimeOffset.UnixEpoch;
+        t.Observe(Pod('R', 0x3B, t0));                                                 // closed
+        Assert.Equal(LidEvent.Opened, t.Observe(Pod('R', 0x34, t0.AddSeconds(1))));    // #4 opens
+        Assert.Equal(LidEvent.Closed, t.Observe(Pod('R', 0x3C, t0.AddSeconds(2))));    // and closes
+        Assert.Equal(LidEvent.None, t.Observe(Pod('L', 0x34, t0.AddSeconds(2.3))));    // left, late
+        Assert.NotNull(t.LastIgnored);
+        Assert.Equal(LidEvent.Opened, t.Observe(Pod('R', 0x35, t0.AddSeconds(4))));    // #5: real
+    }
+
+    [Fact]
+    public void A_lagging_pod_is_trusted_after_the_grace_period()
+    {
+        var t = new LidTracker();
+        var t0 = DateTimeOffset.UnixEpoch;
+        t.Observe(Pod('R', 0x3B, t0));
+        Assert.Equal(LidEvent.Opened, t.Observe(Pod('R', 0x34, t0.AddSeconds(1))));
+        Assert.Equal(LidEvent.None, t.Observe(Pod('L', 0x3A, t0.AddSeconds(1.5))));   // within grace
+        Assert.Equal(LidEvent.Closed, t.Observe(Pod('L', 0x3B, t0.AddSeconds(5))));   // much later
     }
 
     [Fact]

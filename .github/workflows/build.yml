@@ -36,6 +36,21 @@ jobs:
           name: PodBridge-win-x64
           path: out/PodBridge.exe
 
+      # Memory experiment: the same exe without single-file compression. Compressed assemblies are
+      # unpacked into private memory when loaded; uncompressed ones are mapped from the file.
+      # Too big (~190 MB) to commit (GitHub's 100 MB file limit), so it's a build artifact only.
+      - name: Publish uncompressed variant
+        if: github.event_name == 'push'
+        run: >
+          dotnet publish src/PodBridge.App -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o out-uncompressed
+
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push'
+        with:
+          name: PodBridge-win-x64-uncompressed
+          path: out-uncompressed/PodBridge.exe
+
       - name: Attach to release
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
