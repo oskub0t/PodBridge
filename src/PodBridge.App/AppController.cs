@@ -371,6 +371,7 @@ internal sealed class AppController : IDisposable
         if (_card is not { IsVisible: true } card || _cardCaseModel is null) { _lidTimer.Stop(); return; }
         if (!_lidCadence.LooksGone(DateTimeOffset.Now)) return;
         Log.Write($"Case closed: dismissing card (no adverts for {_lidCadence.Threshold.TotalMilliseconds:0} ms)");
+        EarLog($"NO ADVERTS for {_lidCadence.Threshold.TotalMilliseconds:0} ms → card dismissed");
         _lidTimer.Stop();
         _cardCaseModel = null;
         card.Dismiss();
