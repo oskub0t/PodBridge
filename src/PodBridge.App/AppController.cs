@@ -155,6 +155,7 @@ internal sealed class AppController : IDisposable
 
         _media.PlaybackStarted += () => _ui.BeginInvoke(() => OnPcAudioStarted(null));
         CardChrome.UseMaterials = _cfg.UseSystemMaterials;
+        Artwork.Fancy = _cfg.FancyArtwork;
 
         _tray.Clicked += TogglePanel;
         _tray.QuitRequested += Quit;

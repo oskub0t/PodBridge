@@ -40,7 +40,11 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-                <ui:DeviceArt Width="112" Height="112"/>
+                <Grid Width="124" Height="150">
+                    <ui:DeviceArt x:Name="DrawnArt" Width="112" Height="112"/>
+                    <Image x:Name="HeroImage" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"
+                           Visibility="Collapsed"/>
+                </Grid>
                 <StackPanel Grid.Column="1" Margin="20,0,0,0" VerticalAlignment="Center">
                     <TextBlock x:Name="NameText" Style="{StaticResource Title}" FontSize="26" Text="AirPods"/>
                     <TextBlock x:Name="StateText" Style="{StaticResource Secondary}" Margin="0,2,0,12" Text="Not connected"/>
@@ -126,6 +130,10 @@
                     <CheckBox x:Name="LoginSw" Style="{StaticResource Switch}" Content="Open at login"/>
                     <Rectangle Style="{StaticResource Divider}"/>
                     <CheckBox x:Name="MaterialsSw" Style="{StaticResource Switch}" Content="Translucent cards"/>
+                    <Rectangle Style="{StaticResource Divider}"/>
+                    <CheckBox x:Name="FancyArtSw" Style="{StaticResource Switch}" Content="3D artwork"/>
+                    <TextBlock Style="{StaticResource RowNote}"
+                               Text="Off shows simple drawings instead. Both are light on resources; the 3D look is pre-rendered."/>
                     <Rectangle Style="{StaticResource Divider}"/>
                     <Grid Margin="10,8">
                         <Grid.ColumnDefinitions>
@@ -259,6 +267,13 @@
                     <Grid Margin="10,10">
                         <TextBlock Style="{StaticResource RowLabel}" Text="Model"/>
                         <TextBlock x:Name="ModelText" Style="{StaticResource Secondary}" HorizontalAlignment="Right" Text="–"/>
+                    </Grid>
+                    <Rectangle Style="{StaticResource Divider}"/>
+                    <Grid Margin="10,10">
+                        <TextBlock Style="{StaticResource RowLabel}" Text="Artwork"/>
+                        <TextBlock Style="{StaticResource Secondary}" HorizontalAlignment="Right">
+                            <Hyperlink x:Name="CreditLink">3D model by Falah3D, CC BY 4.0</Hyperlink>
+                        </TextBlock>
                     </Grid>
                     <Rectangle Style="{StaticResource Divider}"/>
                     <Grid Margin="10,10">

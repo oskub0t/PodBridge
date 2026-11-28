@@ -5,3 +5,7 @@ out/
 .vs/
 dist/
 tools/icon/icon-*.png
+tools/render3d/node_modules/
+tools/render3d/*.png
+tools/render3d/model.glb
+tools/render3d/package*.json

@@ -1,0 +1,72 @@
+<!doctype html><html><head><meta charset="utf-8">
+<style>html,body{margin:0;background:transparent}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}</script>
+</head><body><script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const q = new URLSearchParams(location.search);
+const W = +(q.get('w') || 900), H = +(q.get('h') || 700);
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1); renderer.setSize(W, H);
+renderer.toneMapping = THREE.NeutralToneMapping; renderer.toneMappingExposure = +(q.get('exp') || 0.95);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.035).texture;
+scene.environmentIntensity = +(q.get('env') || 0.75);
+
+const gltf = await new GLTFLoader().loadAsync('./model.glb');
+const root = gltf.scene;
+const hide = (q.get('hide') || '').split(',').filter(Boolean);
+root.traverse(o => { if (hide.includes(o.name)) o.visible = false; if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+scene.add(root);
+
+// frame the model
+const box = new THREE.Box3().setFromObject(root);
+const size = box.getSize(new THREE.Vector3()), center = box.getCenter(new THREE.Vector3());
+root.position.sub(center);
+const radius = size.length() / 2;
+root.updateMatrixWorld(true);
+const byName = n => root.getObjectByName(n);
+const lid = byName('nJoEOlgGwcdXBHJ'), body = byName('iqLXttIronNPiXb');
+const buds = byName('KUMoISNnaiVmGqL') ? [byName('NwGGgfiOhfXuluV')] : [];
+const bodyBox = new THREE.Box3().setFromObject(body);
+// Hinge: along X at the top-back edge of the body (back = -Z, away from the default camera).
+const hinge = new THREE.Vector3(0, bodyBox.max.y, bodyBox.min.z);
+const lidDeg = +(q.get('lid') || 0);
+if (lidDeg) {
+  const pivot = new THREE.Object3D(); pivot.position.copy(hinge); root.add(pivot); pivot.updateMatrixWorld(true);
+  for (const part of [lid, byName('rXHaxBciRFTeNPF')]) if (part) pivot.attach(part);
+  pivot.rotation.x = lidDeg * Math.PI / 180;
+}
+const budsDy = +(q.get('budsDy') || 0), budsOpacity = q.get('budsOpacity');
+for (const b of buds) {
+  b.position.y += budsDy * size.y;
+  if (budsOpacity !== null) b.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = +budsOpacity; } });
+}
+const cam = new THREE.PerspectiveCamera(30, W / H, radius / 100, radius * 100);
+const az = +(q.get('az') || 35) * Math.PI / 180, el = +(q.get('el') || 22) * Math.PI / 180;
+const dist = radius / Math.sin(cam.fov * Math.PI / 360) * 1.05;
+cam.position.set(dist * Math.cos(el) * Math.sin(az), dist * Math.sin(el), dist * Math.cos(el) * Math.cos(az));
+cam.lookAt(0, 0, 0);
+
+// soft key light + floor shadow
+const key = new THREE.DirectionalLight(0xffffff, +(q.get('key') || 0.9));
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f99, 0.35));
+key.position.set(radius * 2, radius * 4, radius * 2); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048); key.shadow.radius = 12; key.shadow.bias = -0.0005;
+const s = radius * 2; Object.assign(key.shadow.camera, { left: -s, right: s, top: s, bottom: -s, near: radius / 10, far: radius * 12 });
+scene.add(key);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(radius * 8, radius * 8), new THREE.ShadowMaterial({ opacity: +(q.get('shadow') || 0.28) }));
+floor.rotation.x = -Math.PI / 2; floor.position.y = -size.y / 2 - radius * 0.002; floor.receiveShadow = true;
+scene.add(floor);
+
+renderer.render(scene, cam);
+window.__info = { size: size.toArray().map(v => +v.toFixed(4)), meshes: (() => { let n = 0; root.traverse(o => o.isMesh && n++); return n; })() };
+window.__done = true;
+</script></body></html>

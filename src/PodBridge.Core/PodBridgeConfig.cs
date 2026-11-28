@@ -61,6 +61,9 @@ public sealed class PodBridgeConfig
     /// <summary>Windows 11 Acrylic/Mica behind cards. Turn off if your PC renders them oddly.</summary>
     public bool UseSystemMaterials { get; set; } = true;
 
+    /// <summary>3D-rendered artwork ("fancy"); off = the simple drawn icons ("performance").</summary>
+    public bool FancyArtwork { get; set; } = true;
+
     /// <summary>
     /// Ask Windows to deliver only Apple Bluetooth advertisements. Turn off if your AirPods are
     /// noticed less reliably with it (some adapters filter in hardware with different timing).

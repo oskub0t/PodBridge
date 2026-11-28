@@ -75,6 +75,9 @@ public partial class SettingsWindow : Window
         Bind(MaterialsSw, v => { _cfg.UseSystemMaterials = v; CardChrome.UseMaterials = v; });
         Bind(AdvancedSw, v => _cfg.AdvancedFeatures = v);
         Bind(AutoUpdateSw, v => _cfg.CheckForUpdates = v);
+        Bind(FancyArtSw, v => { _cfg.FancyArtwork = v; Artwork.Fancy = v; ApplyArtwork(); });
+        CreditLink.Click += (_, _) => System.Diagnostics.Process.Start(
+            new System.Diagnostics.ProcessStartInfo(Artwork.CreditUrl) { UseShellExecute = true });
         CheckUpdatesBtn.Click += (_, _) => CheckUpdatesClicked?.Invoke();
         UpdateBtn.Click += (_, _) => UpdateClicked?.Invoke();
         InstallBtn.Click += (_, _) => { if (_installed) UninstallClicked?.Invoke(); else InstallClicked?.Invoke(); };
@@ -102,6 +105,8 @@ public partial class SettingsWindow : Window
         LaptopMicSw.IsChecked = _cfg.LaptopMicOutsideCalls;
         AdvancedSw.IsChecked = _cfg.AdvancedFeatures;
         AutoUpdateSw.IsChecked = _cfg.CheckForUpdates;
+        FancyArtSw.IsChecked = _cfg.FancyArtwork;
+        ApplyArtwork();
         LoginSw.IsChecked = Autostart.IsEnabled;
         MaterialsSw.IsChecked = _cfg.UseSystemMaterials;
         MaterialsSw.IsEnabled = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22621);
@@ -137,6 +142,13 @@ public partial class SettingsWindow : Window
                 : $"Not recognised (0x{id:X4})")
             : "–";
         BtNameText.Text = d.BluetoothName ?? "–";
+    }
+
+    private void ApplyArtwork()
+    {
+        if (Artwork.Fancy) HeroImage.Source ??= Artwork.Hero;
+        HeroImage.Visibility = Artwork.Fancy ? Visibility.Visible : Visibility.Collapsed;
+        DrawnArt.Visibility = Artwork.Fancy ? Visibility.Collapsed : Visibility.Visible;
     }
 
     public void ApplyAppState(AppState a)

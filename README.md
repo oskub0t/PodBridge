@@ -93,8 +93,10 @@ Windows' materials and controls, and Apple's style shows in the content. PodBrid
   PodBridge's own pop-up if notifications are turned off.
 - **HUD**: small momentary notices (call mode, music mode, connected), like Apple's overlays.
 - Follows light/dark mode live; keyboard focus ring and screen-reader labels throughout.
-- Segoe UI Variable text (SF Pro is licensed for Apple platforms only); the earbud and case art
-  is drawn in code, not Apple artwork.
+- **3D artwork** (default): a studio render of [“AirPods 4” by Falah3D](https://sketchfab.com/3d-models/airpods-4-e44730974131402eb496352cab19c82e)
+  (CC BY 4.0), pre-rendered with three.js (`tools/render3d`), so it costs no more than a picture.
+  The same artwork is used for every AirPods model. Turn off *3D artwork* for simple drawn icons.
+- Segoe UI Variable text (SF Pro is licensed for Apple platforms only); no Apple artwork.
 
 ## Privacy
 
@@ -178,7 +180,8 @@ confirm with real hardware:
 
 ## License
 
-[MIT](LICENSE).
+[MIT](LICENSE). Third-party components and the 3D model's CC BY 4.0 attribution:
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 PodBridge is an independent project and is not affiliated with, endorsed by, or sponsored by
 Apple Inc. AirPods, iPhone and Mac are trademarks of Apple Inc., registered in the U.S. and

@@ -24,6 +24,11 @@ public partial class ConnectCard : Window
     {
         InitializeComponent();
         CardChrome.Prepare(this, CardBorder);
+        if (Artwork.Fancy)
+        {
+            HeroImage.Source = Artwork.Hero;
+            HeroImage.Visibility = Visibility.Visible;
+        }
         CloseBtn.Click += (_, _) => Dismiss();
         PrimaryBtn.Click += (_, _) => PrimaryClicked?.Invoke();
         SecondaryBtn.Click += (_, _) => SecondaryClicked?.Invoke();
