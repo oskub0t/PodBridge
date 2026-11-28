@@ -20,14 +20,15 @@ clipped; 1 = floating), `seat` how much of the buds shows above the rim when sea
 
 ## Case-open animation (src/PodBridge.App/Assets/anim)
 
-30 frames at 30 fps, 1200×1050 each, then cropped to one shared box and scaled to 300 px tall:
+60 frames over 1 s (played in sync with the display), 1200×1050 each, then cropped to one shared
+box and scaled to 300 px tall (about 2 MB in total):
 
 ```python
 def clamp(x): return max(0.0, min(1.0, x))
 def in_out_cubic(x): return 4*x*x*x if x < 0.5 else 1 - (-2*x + 2)**3 / 2
 def out_cubic(x): return 1 - (1 - x)**3
-for i in range(30):
-    t = i / 29
+for i in range(60):
+    t = i / 59
     lid  = in_out_cubic(clamp(t / 0.45))          # lid opens over the first 0.45 s
     buds = out_cubic(clamp((t - 0.35) / 0.65))    # seated buds visible as the lid opens, rise from 0.35 s
     print(f"frames/f{i:02d}.png", f"lidT={lid:.4f}&budsT={buds:.4f}&w=1200&h=1050&az=32&el=18")
